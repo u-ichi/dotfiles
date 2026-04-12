@@ -12,6 +12,13 @@ source "$SCRIPT_DIR/lib/codex.sh"
 echo "=== dotfiles 初回セットアップ ==="
 echo ""
 
+# === ファイル権限 ===
+# Google Drive 同期で実行権限が落ちることがあるため修復する
+echo "--- ファイル権限の修復 ---"
+chmod 755 "$SCRIPT_DIR"/*.sh "$SCRIPT_DIR"/lib/*.sh
+echo "完了"
+echo ""
+
 # === Homebrew パッケージ ===
 echo "--- Homebrew ---"
 if command -v brew &>/dev/null; then
