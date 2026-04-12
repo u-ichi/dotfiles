@@ -24,10 +24,7 @@ jobs:
 
       - name: TOML check
         run: |
-          curl -fsSL https://github.com/tamasfe/taplo/releases/latest/download/taplo-full-linux-x86_64.gz \
-            | gunzip > /usr/local/bin/taplo
-          chmod +x /usr/local/bin/taplo
-          git ls-files -z '*.toml' | xargs -0 -I{} taplo check {}
+          git ls-files -z '*.toml' | xargs -0 -I{} python3 -c "import tomllib, sys; tomllib.load(open(sys.argv[1],'rb'))" {}
 
       - name: JSON check
         run: |
