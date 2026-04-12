@@ -22,6 +22,8 @@ brew 'pnpm'
 brew 'pstree'
 brew 'sqlite'
 brew 'terminal-notifier'
+brew 'shellcheck'
+brew 'taplo'
 brew 'wget'
 brew 'waydabber/betterdisplay/betterdisplaycli'
 

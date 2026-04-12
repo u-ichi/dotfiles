@@ -33,7 +33,12 @@ brew bundle
 
 ## リント
 
-リントツールなし。
+```bash
+./lint.sh
+```
+
+ShellCheck (Bash), `fish --no-execute` (Fish), taplo (TOML), python3 json.tool (JSON) を実行する。
+GitHub Actions (`push` / `PR` on `main`) でも同等のチェックが走る。
 
 ## アーキテクチャ
 

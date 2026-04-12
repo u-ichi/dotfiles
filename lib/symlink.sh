@@ -96,19 +96,20 @@ create_link() {
 
   # 既存ファイル/ディレクトリがある場合はバックアップ
   if [ -e "$dest" ] || [ -L "$dest" ]; then
-    local backup="${dest}.backup.$(date +%Y%m%d%H%M%S)"
+    local backup
+    backup="${dest}.backup.$(date +%Y%m%d%H%M%S)"
     echo "バックアップ: $dest → $backup"
     mv "$dest" "$backup"
 
     # 古いバックアップを整理（最新 3 件を残す）
-    local backup_prefix="${dest}.backup."
     local count=0
-    for old in $(ls -1t "${backup_prefix}"* 2>/dev/null); do
+    local old
+    while IFS= read -r -d '' old; do
       count=$((count + 1))
       if [ "$count" -gt 3 ]; then
         rm -rf "$old"
       fi
-    done
+    done < <(find "$(dirname "$dest")" -maxdepth 1 -name "$(basename "$dest").backup.*" -print0 | sort -zr)
   fi
 
   ln -sf "$src" "$dest"
