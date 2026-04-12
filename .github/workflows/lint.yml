@@ -29,3 +29,41 @@ jobs:
       - name: JSON check
         run: |
           git ls-files -z '*.json' | xargs -0 -I{} python3 -m json.tool {} > /dev/null
+
+      - name: Secret scan
+        run: |
+          errors=0
+          while IFS= read -r -d '' file; do
+            [ -z "$file" ] && continue
+            # SSH 秘密鍵
+            if grep -qE "^-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----" "$file"; then
+              echo "ERROR: SSH 秘密鍵を検出: $file"; errors=$((errors + 1))
+            fi
+            # AWS アクセスキー
+            if grep -qE "AKIA[0-9A-Z]{16}" "$file"; then
+              echo "ERROR: AWS アクセスキーを検出: $file"; errors=$((errors + 1))
+            fi
+            # GitHub トークン
+            if grep -qE "(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36,}" "$file"; then
+              echo "ERROR: GitHub トークンを検出: $file"; errors=$((errors + 1))
+            fi
+            # Slack トークン
+            if grep -qE "xox[bpors]-[0-9A-Za-z-]+" "$file"; then
+              echo "ERROR: Slack トークンを検出: $file"; errors=$((errors + 1))
+            fi
+            # Google API キー
+            if grep -qE "AIza[0-9A-Za-z_-]{35}" "$file"; then
+              echo "ERROR: Google API キーを検出: $file"; errors=$((errors + 1))
+            fi
+            # Stripe キー
+            if grep -qE "(sk|pk)_(test|live)_[0-9a-zA-Z]{24,}" "$file"; then
+              echo "ERROR: Stripe キーを検出: $file"; errors=$((errors + 1))
+            fi
+            # パスワード・シークレット代入
+            if grep -vE "^\s*(#|//|--)" "$file" | grep -qiE "(password|passwd|secret|api_key|apikey|access_token)\s*=\s*[\"'][^\"']+[\"']"; then
+              echo "WARNING: パスワード/シークレットの代入を検出: $file"; errors=$((errors + 1))
+            fi
+          done < <(git ls-files -z)
+          if [ "$errors" -gt 0 ]; then
+            echo ""; echo "機密情報が $errors 件検出されました"; exit 1
+          fi

@@ -20,6 +20,7 @@ LINKS=(
   ".config/ghostty/config:$HOME/Library/Application Support/com.mitchellh.ghostty/config"
   ".config/karabiner:$HOME/.config/karabiner"
   ".config/tmux/tmux.conf:$HOME/.config/tmux/tmux.conf"
+  "hooks/pre-commit:$DOTFILES_DIR/.git/hooks/pre-commit"
 )
 
 # リンク先の親ディレクトリが DOTFILES_DIR へのシンボリックリンクの場合、

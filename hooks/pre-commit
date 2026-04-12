@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# pre-commit: ステージ済みファイルに機密情報が含まれていないかチェックする
+set -euo pipefail
+
+errors=0
+
+# ステージ済みファイルの内容を検査する（削除ファイルは除外）
+while IFS= read -r file; do
+  [ -z "$file" ] && continue
+
+  # バイナリファイルはスキップ
+  if git diff --cached --numstat -- "$file" | grep -q "^-"; then
+    continue
+  fi
+
+  content=$(git show ":$file" 2>/dev/null) || continue
+
+  # SSH 秘密鍵
+  if echo "$content" | grep -qE "^-----BEGIN (RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----"; then
+    echo "ERROR: SSH 秘密鍵を検出: $file"
+    errors=$((errors + 1))
+  fi
+
+  # AWS アクセスキー
+  if echo "$content" | grep -qE "AKIA[0-9A-Z]{16}"; then
+    echo "ERROR: AWS アクセスキーを検出: $file"
+    errors=$((errors + 1))
+  fi
+
+  # GitHub トークン
+  if echo "$content" | grep -qE "(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36,}"; then
+    echo "ERROR: GitHub トークンを検出: $file"
+    errors=$((errors + 1))
+  fi
+
+  # Slack トークン
+  if echo "$content" | grep -qE "xox[bpors]-[0-9A-Za-z-]+"; then
+    echo "ERROR: Slack トークンを検出: $file"
+    errors=$((errors + 1))
+  fi
+
+  # Google API キー
+  if echo "$content" | grep -qE "AIza[0-9A-Za-z_-]{35}"; then
+    echo "ERROR: Google API キーを検出: $file"
+    errors=$((errors + 1))
+  fi
+
+  # Stripe キー
+  if echo "$content" | grep -qE "(sk|pk)_(test|live)_[0-9a-zA-Z]{24,}"; then
+    echo "ERROR: Stripe キーを検出: $file"
+    errors=$((errors + 1))
+  fi
+
+  # 汎用パスワード・シークレット代入（コメント行は除外）
+  if echo "$content" | grep -vE "^\s*(#|//|--)" | grep -qiE "(password|passwd|secret|api_key|apikey|access_token)\s*=\s*[\"'][^\"']+[\"']"; then
+    echo "WARNING: パスワード/シークレットの代入を検出: $file"
+    errors=$((errors + 1))
+  fi
+
+  # .env ファイル（ファイル名チェック）
+  basename=$(basename "$file")
+  if [[ "$basename" == ".env" || "$basename" == .env.* ]]; then
+    echo "ERROR: .env ファイルを検出: $file"
+    errors=$((errors + 1))
+  fi
+
+  # 秘密鍵ファイル（拡張子チェック）
+  if [[ "$file" == *.pem || "$file" == *.key || "$file" == *.p12 ]]; then
+    echo "ERROR: 秘密鍵ファイルを検出: $file"
+    errors=$((errors + 1))
+  fi
+
+done < <(git diff --cached --name-only --diff-filter=d)
+
+if [ "$errors" -gt 0 ]; then
+  echo ""
+  echo "機密情報が含まれるファイルのコミットをブロックしました。"
+  echo "意図的な場合は git commit --no-verify で回避できます。"
+  exit 1
+fi
