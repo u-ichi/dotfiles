@@ -72,6 +72,18 @@ fi
 # ローカル CA をシステムに登録（未登録なら）
 mkcert -install 2>/dev/null || true
 
+# === Terraform (tfenv) ===
+echo "--- Terraform ---"
+if command -v tfenv &>/dev/null; then
+  echo "インストール: Terraform 最新版"
+  tfenv install latest
+  tfenv use latest
+  echo "済み:     terraform ($(terraform version -json | python3 -c 'import sys,json;print(json.load(sys.stdin)["terraform_version"])' 2>/dev/null || terraform version | head -1))"
+else
+  echo "スキップ: tfenv がインストールされていません"
+fi
+echo ""
+
 # === Fisher プラグイン復元 ===
 echo "--- Fisher ---"
 if command -v fish &>/dev/null; then

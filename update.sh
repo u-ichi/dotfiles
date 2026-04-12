@@ -41,6 +41,18 @@ brew upgrade --cask
 brew cleanup
 echo ""
 
+# === Terraform (tfenv) ===
+echo "=== Terraform の更新 ==="
+echo ""
+if command -v tfenv &>/dev/null; then
+  tfenv install latest
+  tfenv use latest
+  echo "現在のバージョン: $(terraform version | head -1)"
+else
+  echo "スキップ: tfenv がインストールされていません"
+fi
+echo ""
+
 # === npm グローバルパッケージ ===
 NPMFILE="$SCRIPT_DIR/Npmfile"
 
