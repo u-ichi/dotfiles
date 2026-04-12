@@ -1,6 +1,7 @@
 cask_args appdir: "/Applications"
 brew 'awscli'
 brew 'aws-sam-cli'
+cask 'session-manager-plugin'
 brew 'blueutil'
 brew 'cloudflared'
 brew 'direnv'
