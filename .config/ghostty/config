@@ -30,8 +30,8 @@ keybind = ctrl+a>v=new_split:right
 keybind = ctrl+a>h=new_split:down
 keybind = ctrl+a>e=equalize_splits
 
-# === Quick Terminal（どこからでも呼び出し） ===
-keybind = global:cmd+backquote=toggle_quick_terminal
+# === ウィンドウ表示切替（どこからでも呼び出し） ===
+keybind = global:cmd+backquote=toggle_visibility
 
 # === シェル統合 ===
 shell-integration = detect
