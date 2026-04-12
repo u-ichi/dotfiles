@@ -1,39 +1,40 @@
 #!/usr/bin/env bash
-# Codex CLI の設定を展開する（install.sh から読み込み）
+# Codex CLI の設定を展開する（install.sh / update.sh から読み込み）
+# テンプレート: .config/codex/config.toml
 
-# ~/.codex/config.toml に注入するグローバル設定
-# プロジェクト固有の [projects.*] や [plugins.*] はマシン依存のため管理外
-CODEX_GLOBAL_SETTINGS=(
-  "tool_output_token_limit = 25000"
-  "model_auto_compact_token_limit = 128000"
-)
+CODEX_TEMPLATE="$SCRIPT_DIR/.config/codex/config.toml"
 
 ensure_codex_config() {
   local config_dir="$HOME/.codex"
   local config_file="$config_dir/config.toml"
 
-  mkdir -p "$config_dir"
-
-  if [ ! -f "$config_file" ]; then
-    # config.toml が存在しない → 新規作成
-    echo "作成:     $config_file"
-    for line in "${CODEX_GLOBAL_SETTINGS[@]}"; do
-      echo "$line" >> "$config_file"
-    done
-    echo "" >> "$config_file"
+  if [ ! -f "$CODEX_TEMPLATE" ]; then
+    echo "スキップ: テンプレートが見つかりません ($CODEX_TEMPLATE)"
     return
   fi
 
-  # config.toml が存在する → 不足している設定を先頭に追加
+  mkdir -p "$config_dir"
+
+  if [ ! -f "$config_file" ]; then
+    echo "作成:     $config_file"
+    cp "$CODEX_TEMPLATE" "$config_file"
+    return
+  fi
+
+  # 既存の config.toml にテンプレートの設定を補完する
   local missing=()
-  for line in "${CODEX_GLOBAL_SETTINGS[@]}"; do
+  while IFS= read -r line; do
+    # コメント行・空行はスキップ
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ -z "${line// /}" ]] && continue
+
     local key="${line%% =*}"
     if ! grep -q "^${key} " "$config_file"; then
       missing+=("$line")
     else
       echo "済み:     $key"
     fi
-  done
+  done < "$CODEX_TEMPLATE"
 
   if [ ${#missing[@]} -eq 0 ]; then
     return

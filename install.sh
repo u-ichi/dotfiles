@@ -12,9 +12,40 @@ source "$SCRIPT_DIR/lib/codex.sh"
 echo "=== dotfiles 初回セットアップ ==="
 echo ""
 
+# === Homebrew パッケージ ===
+echo "--- Homebrew ---"
+if command -v brew &>/dev/null; then
+  echo "Brewfile からパッケージをインストールします"
+  brew bundle --file="$SCRIPT_DIR/Brewfile"
+else
+  echo "エラー: Homebrew がインストールされていません"
+  echo "https://brew.sh/ からインストールしてください"
+  exit 1
+fi
+echo ""
+
 # === symlink ===
 echo "--- symlink ---"
 sync_links
+echo ""
+
+# === Git ローカル設定 ===
+echo "--- Git ローカル設定 ---"
+GIT_LOCAL="$HOME/.config/git/config.local"
+if [ -f "$GIT_LOCAL" ]; then
+  echo "済み:     $GIT_LOCAL"
+else
+  echo "Git のユーザー情報を設定します"
+  read -rp "  名前: " git_name
+  read -rp "  メール: " git_email
+  mkdir -p "$(dirname "$GIT_LOCAL")"
+  cat > "$GIT_LOCAL" <<EOF
+[user]
+	name = $git_name
+	email = $git_email
+EOF
+  echo "作成:     $GIT_LOCAL"
+fi
 echo ""
 
 # === Claude Code (ネイティブインストーラー) ===

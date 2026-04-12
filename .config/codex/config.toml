@@ -1,0 +1,6 @@
+# Codex CLI グローバル設定
+# ~/.codex/config.toml に展開される
+# プロジェクト固有の [projects.*] や [plugins.*] はマシン依存のため管理外
+
+tool_output_token_limit = 25000
+model_auto_compact_token_limit = 128000

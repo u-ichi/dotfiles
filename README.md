@@ -4,25 +4,21 @@ macOS 環境の設定ファイルとパッケージを管理するリポジト�
 
 ## セットアップ
 
-```bash
-# Homebrew パッケージのインストール
-brew bundle
+[Homebrew](https://brew.sh/) をインストールした状態で以下を実行する:
 
-# 設定ファイルのシンボリックリンク作成
+```bash
+git clone git@github.com:u-ichi/dotfiles.git
+cd dotfiles
 ./install.sh
 ```
 
-## 初回セットアップ後の設定
+`install.sh` が以下を一括で行う:
 
-Git のユーザー情報は `.config/git/config.local` に設定する（リポジトリ管理外）:
-
-```bash
-cat > ~/.config/git/config.local <<'EOF'
-[user]
-    name = Your Name
-    email = your@email.com
-EOF
-```
+1. Brewfile からパッケージをインストール
+2. 設定ファイルの symlink を作成
+3. Git のユーザー情報を対話的に設定（`~/.config/git/config.local`）
+4. Claude Code / mkcert / Fisher をインストール
+5. macOS defaults を適用
 
 ## 構成
 

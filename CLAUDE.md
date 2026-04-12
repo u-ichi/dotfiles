@@ -46,6 +46,7 @@ brew bundle
 │   └── codex.sh                #   Codex CLI 設定の展開関数
 ├── Brewfile                    # Homebrew パッケージ・cask 定義
 ├── .config/
+│   ├── codex/config.toml       # Codex CLI 設定テンプレート (→ ~/.codex/config.toml)
 │   ├── fish/                   # Fish Shell 設定
 │   │   ├── config.fish         #   メイン設定 (PATH, alias)
 │   │   ├── fish_plugins        #   Fisher プラグイン一覧
