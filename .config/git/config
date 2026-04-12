@@ -1,0 +1,28 @@
+[user]
+	# config.local で name / email を設定する
+	# name = Your Name
+	# email = your@email.com
+[core]
+	editor = nvim
+	excludesfile = ~/.gitignore
+[alias]
+	tree = "log --graph --date=iso --pretty='[%ad]%C(auto) %h%d %Cgreen%an%Creset : %s'"
+[diff]
+	tool = vimdiff
+[difftool]
+	prompt = false
+[merge]
+	tool = vimdiff
+[mergetool]
+	prompt = false
+[credential]
+	helper = osxkeychain
+[filter "lfs"]
+	required = true
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
+	process = git-lfs filter-process
+[init]
+	defaultBranch = main
+[include]
+	path = config.local

@@ -1,0 +1,41 @@
+# ~/.config/ghostty/config
+
+# === フォント ===
+#font-family = JetBrains Mono Nerd Font
+font-family = Moralerspace Neon
+
+font-size = 14
+#font-thicken = true
+
+# === テーマ（システムのライト/ダークに自動追従） ===
+theme = light:Catppuccin Latte,dark:Catppuccin Mocha
+
+# === ウィンドウ ===
+window-padding-x = 12
+window-padding-y = 12
+background-opacity = 1
+background-blur-radius = 16
+
+# === ペイン区切り ===
+split-divider-color = #585b70
+
+# === ペインナビゲーション（Option+矢印） ===
+keybind = alt+left=goto_split:left
+keybind = alt+down=goto_split:bottom
+keybind = alt+up=goto_split:top
+keybind = alt+right=goto_split:right
+
+# === スプリット作成 ===
+keybind = ctrl+a>v=new_split:right
+keybind = ctrl+a>h=new_split:down
+keybind = ctrl+a>e=equalize_splits
+
+# === Quick Terminal（どこからでも呼び出し） ===
+keybind = global:cmd+backquote=toggle_quick_terminal
+
+# === シェル統合 ===
+shell-integration = detect
+desktop-notifications = true
+
+# === 設定リロード ===
+keybind = cmd+shift+comma=reload_config

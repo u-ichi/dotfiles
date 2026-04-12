@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# 日常の更新スクリプト（symlink 同期 + パッケージ更新）
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib/symlink.sh"
+source "$SCRIPT_DIR/lib/docker.sh"
+source "$SCRIPT_DIR/lib/codex.sh"
+
+# === ファイル権限 ===
+# Google Drive 同期で実行権限が落ちることがあるため修復する
+echo "=== ファイル権限の修復 ==="
+chmod 755 "$SCRIPT_DIR"/*.sh "$SCRIPT_DIR"/lib/*.sh
+echo "完了"
+echo ""
+
+# === symlink ===
+echo "=== symlink 同期 ==="
+echo ""
+sync_links
+echo ""
+
+# === アプリケーション設定 ===
+echo "=== アプリケーション設定 ==="
+ensure_docker_autostart
+echo ""
+
+# === Codex CLI 設定 ===
+echo "=== Codex CLI 設定 ==="
+ensure_codex_config
+echo ""
+
+# === Homebrew ===
+echo "=== Homebrew パッケージの更新 ==="
+echo ""
+brew update
+brew bundle --file="$SCRIPT_DIR/Brewfile"
+brew upgrade
+brew upgrade --cask
+brew cleanup
+echo ""
+
+# === npm グローバルパッケージ ===
+NPMFILE="$SCRIPT_DIR/Npmfile"
+
+if [ -f "$NPMFILE" ] && command -v npm &>/dev/null; then
+  echo "=== npm グローバルパッケージの更新 ==="
+  echo ""
+  while IFS= read -r pkg || [ -n "$pkg" ]; do
+    [[ -z "$pkg" || "$pkg" =~ ^# ]] && continue
+    echo "更新: $pkg"
+    npm install -g "$pkg@latest"
+  done < "$NPMFILE"
+  echo ""
+fi
+
+echo "完了しました"
