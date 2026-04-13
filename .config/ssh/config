@@ -1,0 +1,2 @@
+# ホスト定義は config.local に記述（リポジトリ管理外）
+Include config.local

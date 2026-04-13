@@ -59,6 +59,7 @@ GitHub Actions (`push` / `PR` on `main`) でも同等のチェックが走る。
 │   │   ├── completions/        #   補完定義 (gcloud, gsutil)
 │   │   └── functions/          #   カスタム関数 (claude.fish 等、テーマ系は .gitignore)
 │   ├── git/config              # Git 設定 (共通、個人情報は config.local に分離)
+│   ├── ssh/config              # SSH 設定 (Include のみ、ホスト定義は ~/.ssh/config.local に分離)
 │   ├── tmux/tmux.conf          # tmux 設定
 │   ├── ghostty/config          # Ghostty ターミナル設定
 │   └── karabiner/              # Karabiner-Elements キーリマップ

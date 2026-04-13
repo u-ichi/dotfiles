@@ -33,6 +33,7 @@ allowed-tools: Bash(bash *) Bash(git *) Bash(fish *) Read Edit Write
 | Ghostty | `.config/ghostty/config` | `~/Library/Application Support/com.mitchellh.ghostty/config` | 即時（symlink）、`Cmd+Shift+,` でリロード |
 | tmux | `.config/tmux/tmux.conf` | `~/.config/tmux/tmux.conf` | 即時（symlink）、`prefix r` でリロード |
 | Karabiner | `.config/karabiner/` | `~/.config/karabiner/` | 即時（ディレクトリ symlink、Karabiner が自動検出） |
+| SSH | `.config/ssh/config` | `~/.ssh/config` | 即時（symlink）。ホスト定義は `~/.ssh/config.local`（リポジトリ外） |
 | Codex CLI | `.config/codex/config.toml` | `~/.codex/config.toml` | `update.sh` の `ensure_codex_config` で展開 |
 
 ## 手順
@@ -118,6 +119,12 @@ bash <dotfiles ディレクトリ>/update.sh
 
 `.config/git/config` には個人情報（name, email）を直接書かない。
 `[include] path = config.local` で分離されており、個人情報は `config.local`（リポジトリ外）に書く。
+
+### SSH のホスト定義
+
+`.config/ssh/config` には `Include config.local` のみ記述する。
+実際のホスト定義（IP, ユーザー名等）は `~/.ssh/config.local`（リポジトリ外）に書く。
+Git config と同じ config/config.local パターン。
 
 ### Fish の functions/
 
