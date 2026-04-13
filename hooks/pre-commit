@@ -1,7 +1,47 @@
 #!/usr/bin/env bash
-# pre-commit: ステージ済みファイルに機密情報が含まれていないかチェックする
+# pre-commit: lint + 機密情報スキャン
 set -euo pipefail
 
+SCRIPT_DIR="$(git rev-parse --show-toplevel)"
+
+# === lint（ステージ済みファイルのみ） ===
+staged_files=$(git diff --cached --name-only --diff-filter=d)
+
+lint_errors=0
+
+# ShellCheck
+if command -v shellcheck &>/dev/null; then
+  for f in $(echo "$staged_files" | grep -E '\.sh$' || true); do
+    shellcheck -x "$SCRIPT_DIR/$f" || lint_errors=$((lint_errors + 1))
+  done
+fi
+
+# Fish 構文チェック
+if command -v fish &>/dev/null; then
+  for f in $(echo "$staged_files" | grep -E '\.fish$' || true); do
+    fish --no-execute "$SCRIPT_DIR/$f" || lint_errors=$((lint_errors + 1))
+  done
+fi
+
+# TOML
+if command -v taplo &>/dev/null; then
+  for f in $(echo "$staged_files" | grep -E '\.toml$' || true); do
+    taplo check "$SCRIPT_DIR/$f" || lint_errors=$((lint_errors + 1))
+  done
+fi
+
+# JSON
+for f in $(echo "$staged_files" | grep -E '\.json$' || true); do
+  python3 -m json.tool "$SCRIPT_DIR/$f" > /dev/null || lint_errors=$((lint_errors + 1))
+done
+
+if [ "$lint_errors" -gt 0 ]; then
+  echo ""
+  echo "lint エラー: $lint_errors 件。修正してから再コミットしてください。"
+  exit 1
+fi
+
+# === 機密情報スキャン ===
 errors=0
 
 # ステージ済みファイルの内容を検査する（削除ファイルは除外）

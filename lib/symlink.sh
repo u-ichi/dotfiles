@@ -6,22 +6,23 @@ _normalize() { iconv -f utf-8-mac -t utf-8 2>/dev/null <<< "$1" || echo "$1"; }
 
 DOTFILES_DIR="$(_normalize "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)")"
 
-# リンク定義: "ソース:リンク先"
-# fish は個別ファイル単位でリンクし、自動生成ファイルの repo 混入を防ぐ
-LINKS=(
-  ".config/fish/config.fish:$HOME/.config/fish/config.fish"
-  ".config/fish/fish_plugins:$HOME/.config/fish/fish_plugins"
-  ".config/fish/completions:$HOME/.config/fish/completions"
-  ".config/fish/functions/claude.fish:$HOME/.config/fish/functions/claude.fish"
-  ".config/fish/functions/claude-worktree.fish:$HOME/.config/fish/functions/claude-worktree.fish"
-  ".config/fish/functions/fish_greeting.fish:$HOME/.config/fish/functions/fish_greeting.fish"
-  ".config/fish/functions/gcloud_sdk_argcomplete.fish:$HOME/.config/fish/functions/gcloud_sdk_argcomplete.fish"
-  ".config/git/config:$HOME/.gitconfig"
-  ".config/ghostty/config:$HOME/Library/Application Support/com.mitchellh.ghostty/config"
-  ".config/karabiner:$HOME/.config/karabiner"
-  ".config/tmux/tmux.conf:$HOME/.config/tmux/tmux.conf"
-  "hooks/pre-commit:$DOTFILES_DIR/.git/hooks/pre-commit"
-)
+# links.conf からリンク定義を読み込む
+_load_links() {
+  local conf="$DOTFILES_DIR/links.conf"
+  LINKS=()
+  while IFS= read -r line; do
+    # 空行・コメント行をスキップ
+    [[ -z "${line// /}" || "$line" =~ ^[[:space:]]*# ]] && continue
+    local src dest
+    src="$(echo "${line%%:*}" | xargs)"
+    dest="$(echo "${line#*:}" | xargs)"
+    # シェル変数を展開
+    dest="${dest//\$HOME/$HOME}"
+    dest="${dest//\$DOTFILES_DIR/$DOTFILES_DIR}"
+    LINKS+=("$src:$dest")
+  done < "$conf"
+}
+_load_links
 
 # リンク先の親ディレクトリが DOTFILES_DIR へのシンボリックリンクの場合、
 # 実ディレクトリに変換する（ディレクトリリンク → 個別ファイルリンク移行用）

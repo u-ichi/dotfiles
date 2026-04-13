@@ -46,8 +46,9 @@ GitHub Actions (`push` / `PR` on `main`) でも同等のチェックが走る。
 .
 ├── install.sh                  # 初回セットアップ (symlink + Claude Code)
 ├── update.sh                   # 日常更新 (symlink 同期 + brew/npm)
+├── links.conf                  # symlink 定義 (ソース → リンク先の宣言)
 ├── lib/
-│   ├── symlink.sh              #   symlink 定義・作成関数 (共通)
+│   ├── symlink.sh              #   symlink 作成関数 (links.conf を読み込む)
 │   └── codex.sh                #   Codex CLI 設定の展開関数
 ├── Brewfile                    # Homebrew パッケージ・cask 定義
 ├── .config/

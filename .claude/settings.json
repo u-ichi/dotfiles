@@ -1,3 +1,15 @@
 {
-  "$schema": "https://json.schemastore.org/claude-code-settings.json"
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(git -C *)",
+      "Bash(./lint.sh)",
+      "Bash(shellcheck *)",
+      "Bash(fish --no-execute *)",
+      "Bash(taplo check *)",
+      "Bash(python3 -m json.tool *)",
+      "Bash(brew bundle *)",
+      "Bash(chmod 755 *)"
+    ]
+  }
 }
