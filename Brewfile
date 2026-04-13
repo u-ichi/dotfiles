@@ -78,6 +78,7 @@ cask 'bitwarden'
 cask 'caffeine'
 cask 'istat-menus'
 cask 'karabiner-elements'
+cask 'tailscale-app'
 
 # === GUI: その他 ===
 cask 'bambu-studio'
