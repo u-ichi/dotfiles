@@ -1,5 +1,8 @@
 fish_add_path /opt/homebrew/bin ~/.local/bin
 
+# mkcert のルート CA を Node.js に信頼させる（ctxledger MCP 等の自己署名証明書用）
+set -gx NODE_EXTRA_CA_CERTS "$HOME/Library/Application Support/mkcert/rootCA.pem"
+
 if status is-interactive
     # bobthefish: git リポジトリ内ではプロジェクトルートより上の親パスを非表示
     set -g theme_show_project_parent no
