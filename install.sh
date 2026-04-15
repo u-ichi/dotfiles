@@ -8,6 +8,7 @@ source "$SCRIPT_DIR/lib/symlink.sh"
 source "$SCRIPT_DIR/lib/defaults.sh"
 source "$SCRIPT_DIR/lib/docker.sh"
 source "$SCRIPT_DIR/lib/codex.sh"
+source "$SCRIPT_DIR/lib/aws.sh"
 
 echo "=== dotfiles 初回セットアップ ==="
 echo ""
@@ -53,6 +54,11 @@ else
 EOF
   echo "作成:     $GIT_LOCAL"
 fi
+echo ""
+
+# === AWS config ===
+echo "--- AWS config ---"
+assemble_aws_config
 echo ""
 
 # === Claude Code (ネイティブインストーラー) ===

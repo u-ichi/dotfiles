@@ -41,6 +41,10 @@ Thumbs.db
 # Git ローカル設定（個人情報）
 .config/git/config.local
 
+# AWS（組織固有の SSO 設定・アカウント ID）
+.config/aws/config.d/1[0-9]-*.conf
+.config/aws/config.d/90-imported.conf
+
 # 機密ファイル
 .env
 .env.*

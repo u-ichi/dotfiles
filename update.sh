@@ -7,6 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib/symlink.sh"
 source "$SCRIPT_DIR/lib/docker.sh"
 source "$SCRIPT_DIR/lib/codex.sh"
+source "$SCRIPT_DIR/lib/aws.sh"
 
 # === ファイル権限 ===
 # Google Drive 同期で実行権限が落ちることがあるため修復する
@@ -29,6 +30,11 @@ echo ""
 # === Codex CLI 設定 ===
 echo "=== Codex CLI 設定 ==="
 ensure_codex_config
+echo ""
+
+# === AWS config ===
+echo "=== AWS config ==="
+assemble_aws_config
 echo ""
 
 # === Homebrew ===
