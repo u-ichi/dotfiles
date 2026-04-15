@@ -71,6 +71,7 @@ cask 'raycast'
 # === GUI: システム・ユーティリティ ===
 cask '1password'
 cask 'alt-tab'
+cask 'aws-vpn-client'
 cask 'atok'
 cask 'applite'
 cask 'betterdisplay'
