@@ -52,7 +52,7 @@ GitHub Actions (`push` / `PR` on `main`) でも同等のチェックが走る。
 │   └── codex.sh                #   Codex CLI 設定の展開関数
 ├── Brewfile                    # Homebrew パッケージ・cask 定義
 ├── .config/
-│   ├── codex/config.toml       # Codex CLI 設定テンプレート (→ ~/.codex/config.toml)
+│   ├── codex/config.toml       # Codex CLI 設定テンプレート (マネージドブロック方式で ~/.codex/config.toml に展開)
 │   ├── fish/                   # Fish Shell 設定
 │   │   ├── config.fish         #   メイン設定 (PATH, alias)
 │   │   ├── fish_plugins        #   Fisher プラグイン一覧
@@ -69,6 +69,23 @@ GitHub Actions (`push` / `PR` on `main`) でも同等のチェックが走る。
 設定ファイルはこのリポジトリからホームディレクトリへ symlink する方式（Stow 等は不使用）。
 Fish は個別ファイル単位で symlink し、自動生成ファイル（bobthefish, fisher）の repo 混入を防ぐ。
 Fisher プラグインは `fish_plugins` のみ追跡し、`fisher update` で復元する。
+
+### Codex CLI のマネージドブロック方式
+
+`~/.codex/config.toml` は symlink ではなくコピー + 部分置換で管理する
+（Codex が TUI 操作時に `[projects.*]` / `[plugins.*]` をファイル末尾に追記するため、
+一方向 symlink できない）。
+
+テンプレート `.config/codex/config.toml` は BEGIN/END マーカーで囲まれており、
+`ensure_codex_config`（`lib/codex.sh`）が以下を行う:
+
+- 初回インストール: テンプレートをそのままコピー
+- マーカーあり: BEGIN/END の間をテンプレートで丸ごと置換。ブロック外は手つかず
+- マーカー未検出の既存ファイル: 自動バックアップ（`*.bak.YYYYMMDD-HHMMSS`）後、
+  テンプレートを先頭に配置し、既存ファイルから `[projects.*]` / `[plugins.*]` のみ抽出して末尾に追加
+
+ユーザーが追加の Codex 設定を手で書く場合はマーカーの**外側**に書く（上書きされない）。
+用途別 profile の設計意図は claude リポジトリの `home/rules/codex-delegation.md` を参照。
 
 ## プロジェクト固有の規約
 

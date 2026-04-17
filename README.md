@@ -31,6 +31,37 @@ cd dotfiles
 | `.config/git/config.local` | Git 設定（個人情報、管理外） |
 | `.config/ghostty/config` | Ghostty ターミナル設定 |
 | `.config/karabiner/` | Karabiner-Elements キーリマップ |
+| `.config/codex/config.toml` | Codex CLI 設定テンプレート（マネージドブロック方式、後述） |
+| `lib/codex.sh` | Codex 設定の展開関数 |
+
+## Codex CLI 設定の同期方式
+
+`~/.codex/config.toml` は**マネージドブロック方式**で管理する。
+symlink ではなくコピー + 部分置換を使うのは、Codex が TUI 操作時に
+`[projects.*]` / `[plugins.*]` をファイル末尾に追記するため、
+リポジトリから一方向 symlink できないため。
+
+```
+# ====== BEGIN: managed by dotfiles ======
+<.config/codex/config.toml の内容で置換される範囲>
+# ====== END: managed by dotfiles ======
+
+[projects."..."]      ← Codex が trust を追加した際に自動追記（保持される）
+[plugins."..."]       ← Codex がプラグインを有効化した際に自動追記（保持される）
+<その他のカスタム追記> ← マーカー外に書けば保持される
+```
+
+`install.sh` / `update.sh` で呼ばれる `ensure_codex_config` が以下を行う:
+
+1. **初回インストール**（`~/.codex/config.toml` 未存在）: テンプレートをそのままコピー
+2. **マーカーあり**: BEGIN/END の間をテンプレートで丸ごと置換。ブロック外は手つかず
+3. **マーカー未検出の既存ファイル**（マイグレーション）:
+   - `~/.codex/config.toml.bak.YYYYMMDD-HHMMSS` に自動バックアップ
+   - テンプレートを先頭に配置し、既存ファイルから `[projects.*]` / `[plugins.*]` のみ抽出して末尾に追加
+   - 上記以外の手動追記は保持されない（バックアップから手で戻す）
+
+用途別 profile（`routine` / `review` / `patch` / `research`）の設計意図は
+[claude リポジトリの codex-delegation ルール](../../home/rules/codex-delegation.md) を参照。
 
 ## セキュリティに関する注意
 
