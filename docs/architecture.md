@@ -30,6 +30,7 @@
 │   ├── ssh/config              # SSH 設定 (Include のみ、ホスト定義は ~/.ssh/config.local に分離)
 │   ├── tmux/tmux.conf          # tmux 設定 (prefix: Ctrl+S)
 │   ├── ghostty/config          # Ghostty ターミナル設定
+│   ├── glow/glow.yml           # Glow (markdown viewer) 設定
 │   └── karabiner/              # Karabiner-Elements キーリマップ
 ├── hooks/
 │   └── pre-commit              # Git pre-commit フック (lint.sh 実行)
@@ -105,3 +106,15 @@ symlink ではなくコピー + 部分置換を使うのは、Codex が TUI 操�
 - **Google Drive 同期で実行権限が落ちる**: `install.sh` / `update.sh` 冒頭で `chmod 755` を再付与している。手動で実行する前にエラーが出たら `bash` 経由で起動するか権限を再付与する
 - **Fisher プラグインの自動生成ファイルが repo に混入**: Fish の `functions/` を丸ごと symlink すると bobthefish 等のテーマファイルが repo に書き込まれる。これを防ぐため個別ファイル単位で symlink している（`links.conf` 参照）
 - **`~/.codex/config.toml` の手動追記が消える**: マネージドブロックの **外側** に書けば保持される。`[projects.*]` / `[plugins.*]` 以外のカスタム追記をしている場合は注意
+
+## macOS 固有の設定ファイルパス
+
+一部ツールは macOS で XDG (`~/.config/`) ではなく `~/Library/` 以下を既定の設定ファイル置き場にしている。
+リポジトリ内は XDG 風の `.config/<tool>/` に統一してツリー見通しを揃え、`links.conf` で OS 側の実パスへ symlink する。
+
+| ツール | macOS 既定の設定パス | 備考 |
+|-------|--------------------|------|
+| Ghostty | `~/Library/Application Support/com.mitchellh.ghostty/config` | アプリ bundle id ベース |
+| Glow | `~/Library/Preferences/glow/glow.yml` | `XDG_CONFIG_HOME` は無視される (確認済み、v2.1.2) |
+
+`~/.config/<tool>/` 配下に置いても読まれないツールがあるため、「リポジトリ内のパス」と「symlink 先のパス」は必ずしも一致しない。`links.conf` の右辺が正となる。

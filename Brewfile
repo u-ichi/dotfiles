@@ -31,6 +31,7 @@ brew 'taplo'
 
 # === CLI: システム・ユーティリティ ===
 brew 'blueutil'
+brew 'glow'
 brew 'gtop'
 brew 'htop'
 brew 'ollama'
