@@ -37,6 +37,7 @@ brew 'htop'
 brew 'ollama'
 brew 'pstree'
 brew 'terminal-notifier'
+brew 'tmux'
 brew 'wget'
 brew 'waydabber/betterdisplay/betterdisplaycli'
 
