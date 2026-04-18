@@ -41,6 +41,7 @@ brew 'waydabber/betterdisplay/betterdisplaycli'
 
 # === GUI: 開発 ===
 cask 'codex'
+cask 'codex-app'
 cask 'cursor'
 cask 'docker-desktop'
 cask 'ghostty'
