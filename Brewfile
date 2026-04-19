@@ -28,6 +28,7 @@ brew 'poppler'
 brew 'shellcheck'
 brew 'sqlite'
 brew 'taplo'
+brew 'yq'
 
 # === CLI: システム・ユーティリティ ===
 brew 'blueutil'
