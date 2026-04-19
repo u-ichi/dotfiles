@@ -26,9 +26,14 @@ keybind = alt+up=goto_split:top
 keybind = alt+right=goto_split:right
 
 # === スプリット作成 ===
-keybind = ctrl+a>v=new_split:right
-keybind = ctrl+a>h=new_split:down
-keybind = ctrl+a>e=equalize_splits
+keybind = ctrl+s>v=new_split:right
+keybind = ctrl+s>h=new_split:down
+keybind = ctrl+s>e=equalize_splits
+# ctrl+a の古い chord を明示解除 (reload_config は追記型で古い bind が残るため)
+keybind = ctrl+a>v=unbind
+keybind = ctrl+a>h=unbind
+keybind = ctrl+a>e=unbind
+
 
 # === ウィンドウ表示切替（どこからでも呼び出し） ===
 keybind = global:cmd+backquote=toggle_visibility
