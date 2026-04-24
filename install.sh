@@ -4,19 +4,20 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib/permissions.sh"
 source "$SCRIPT_DIR/lib/symlink.sh"
 source "$SCRIPT_DIR/lib/defaults.sh"
 source "$SCRIPT_DIR/lib/docker.sh"
 source "$SCRIPT_DIR/lib/codex.sh"
 source "$SCRIPT_DIR/lib/aws.sh"
+source "$SCRIPT_DIR/lib/terraform.sh"
 
 echo "=== dotfiles 初回セットアップ ==="
 echo ""
 
 # === ファイル権限 ===
-# Google Drive 同期で実行権限が落ちることがあるため修復する
 echo "--- ファイル権限の修復 ---"
-chmod 755 "$SCRIPT_DIR"/*.sh "$SCRIPT_DIR"/lib/*.sh
+fix_permissions
 echo "完了"
 echo ""
 
@@ -87,14 +88,7 @@ mkcert -install 2>/dev/null || true
 
 # === Terraform (tfenv) ===
 echo "--- Terraform ---"
-if command -v tfenv &>/dev/null; then
-  echo "インストール: Terraform 最新版"
-  tfenv install latest
-  tfenv use latest
-  echo "済み:     terraform ($(terraform version -json | python3 -c 'import sys,json;print(json.load(sys.stdin)["terraform_version"])' 2>/dev/null || terraform version | head -1))"
-else
-  echo "スキップ: tfenv がインストールされていません"
-fi
+ensure_terraform_latest
 echo ""
 
 # === Fisher プラグイン復元 ===
