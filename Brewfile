@@ -1,5 +1,10 @@
 cask_args appdir: "/Applications"
 
+# === 非公式 tap (u-ichi/homebrew-tap) ===
+# Homebrew 公式に無い macOS アプリ用の個人 tap
+# cask の追加・更新は dotfiles 側の pkg-add / cask-update skill で行う
+tap 'u-ichi/tap'
+
 # === CLI: クラウド・インフラ ===
 brew 'awscli'
 brew 'aws-sam-cli'
@@ -14,6 +19,7 @@ brew 'trivy'
 brew 'direnv'
 brew 'docker-compose'
 brew 'fish'
+brew 'fzf'
 brew 'gh'
 brew 'git'
 brew 'git-lfs'
@@ -89,6 +95,7 @@ cask 'tailscale-app'
 
 # === GUI: その他 ===
 cask 'bambu-studio'
+cask 'u-ichi/tap/tolaria'
 
 # === フォント ===
 cask 'font-hackgen'
