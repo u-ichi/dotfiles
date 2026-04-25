@@ -9,7 +9,7 @@ Homebrew (Brewfile) でパッケージ管理し、各アプリの設定ファイ
 - Fish Shell (bob-the-fish テーマ, Fisher)
 - Ghostty (Catppuccin テーマ, Moralerspace Neon)
 - Neovim (vi/vim エイリアスで使用)
-- tmux (prefix: Ctrl+S)
+- tmux (prefix: Ctrl+A)
 - Karabiner-Elements (キーリマップ)
 - Raycast (ランチャー・拡張)
 - Git (vimdiff, LFS, Azure DevOps 対応)

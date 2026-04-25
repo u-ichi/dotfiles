@@ -157,6 +157,35 @@
                                 "type": "basic"
                             }
                         ]
+                    },
+                    {
+                        "description": "tmux prefix: 日本語IME中の Ctrl+A を Ghostty で確実に届ける (英数モードに切り替えて Ctrl+A 送信。日本語に戻すのは右Cmd)",
+                        "manipulators": [
+                            {
+                                "type": "basic",
+                                "from": {
+                                    "key_code": "a",
+                                    "modifiers": {
+                                        "mandatory": ["control"],
+                                        "optional": ["caps_lock"]
+                                    }
+                                },
+                                "to": [
+                                    { "key_code": "japanese_eisuu" },
+                                    { "key_code": "a", "modifiers": ["left_control"] }
+                                ],
+                                "conditions": [
+                                    {
+                                        "type": "input_source_if",
+                                        "input_sources": [{ "language": "ja" }]
+                                    },
+                                    {
+                                        "type": "frontmost_application_if",
+                                        "bundle_identifiers": ["^com\\.mitchellh\\.ghostty$"]
+                                    }
+                                ]
+                            }
+                        ]
                     }
                 ]
             },
