@@ -1,14 +1,9 @@
-# Claude 終了後に tmux pane title を pwd basename にリセットする内部ヘルパ
-# Claude Code は OSC 2 で動的に pane title を書き換えるが、終了時には何も送らず、
-# 古い作業タイトル (cc-panes の「● 待ち」判定や非 active 時 border 色にも影響) が
-# そのまま残る。終了直後に OSC 2 を 1 回送って「作業セッションが閉じた」状態に戻す。
+# Claude Code 起動の内部ヘルパ。worktree モードのフラグ分岐から共通で呼ぶ。
+# 終了時の pane title リセットは claude-code-base-repository 側の
+# SessionEnd hook (session-end-reset-pane-title.sh) が担当するため、
+# ここでは exit 後の OSC 2 リセットは行わない (二重実装解消)。
 function __claude_run
     command claude $argv
-    set -l rc $status
-    if set -q TMUX
-        printf '\e]2;%s\e\\' (basename (pwd))
-    end
-    return $rc
 end
 
 function claude --description "Claude Code を worktree モードで起動（既存選択 or 新規作成）"
