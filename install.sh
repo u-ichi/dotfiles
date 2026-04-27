@@ -8,7 +8,6 @@ source "$SCRIPT_DIR/lib/permissions.sh"
 source "$SCRIPT_DIR/lib/symlink.sh"
 source "$SCRIPT_DIR/lib/defaults.sh"
 source "$SCRIPT_DIR/lib/docker.sh"
-source "$SCRIPT_DIR/lib/codex.sh"
 source "$SCRIPT_DIR/lib/aws.sh"
 source "$SCRIPT_DIR/lib/terraform.sh"
 
@@ -103,11 +102,6 @@ if command -v fish &>/dev/null; then
 else
   echo "スキップ: fish がインストールされていません"
 fi
-
-# === Codex CLI 設定 ===
-echo "--- Codex CLI ---"
-ensure_codex_config
-echo ""
 
 # === macOS defaults ===
 echo "--- macOS defaults ---"

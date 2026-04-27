@@ -24,8 +24,8 @@ cd dotfiles
 
 ## 内部構成
 
-ディレクトリ構成、symlink 同期方式、Codex CLI 設定のマネージドブロック方式など
-内部設計の詳細は [`docs/architecture.md`](docs/architecture.md) を参照。
+ディレクトリ構成、symlink 同期方式など内部設計の詳細は
+[`docs/architecture.md`](docs/architecture.md) を参照。
 
 ## セキュリティに関する注意
 

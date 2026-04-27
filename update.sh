@@ -7,7 +7,6 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib/permissions.sh"
 source "$SCRIPT_DIR/lib/symlink.sh"
 source "$SCRIPT_DIR/lib/docker.sh"
-source "$SCRIPT_DIR/lib/codex.sh"
 source "$SCRIPT_DIR/lib/aws.sh"
 source "$SCRIPT_DIR/lib/terraform.sh"
 
@@ -26,11 +25,6 @@ echo ""
 # === アプリケーション設定 ===
 echo "=== アプリケーション設定 ==="
 ensure_docker_autostart
-echo ""
-
-# === Codex CLI 設定 ===
-echo "=== Codex CLI 設定 ==="
-ensure_codex_config
 echo ""
 
 # === AWS config ===

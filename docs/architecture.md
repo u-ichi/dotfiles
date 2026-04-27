@@ -13,14 +13,12 @@
 ├── links.conf                  # symlink 定義 (ソース → リンク先の宣言)
 ├── lib/
 │   ├── symlink.sh              #   symlink 作成関数 (links.conf を読み込む)
-│   ├── codex.sh                #   Codex CLI 設定の展開関数
 │   ├── docker.sh               #   Docker Desktop 自動起動の有効化
 │   ├── defaults.sh             #   macOS defaults の適用
 │   └── aws.sh                  #   AWS config を config.d パターンで組み立て
 ├── Brewfile                    # Homebrew パッケージ・cask 定義
 ├── Npmfile                     # npm グローバルパッケージ定義 (任意)
 ├── .config/
-│   ├── codex/config.toml       # Codex CLI 設定テンプレート (マネージドブロック方式)
 │   ├── fish/                   # Fish Shell 設定
 │   │   ├── config.fish         #   メイン設定 (PATH, alias)
 │   │   ├── fish_plugins        #   Fisher プラグイン一覧
@@ -48,47 +46,21 @@
 | 一般的な設定ファイル | symlink (`links.conf`) | 編集が即反映され、リポジトリと実環境の乖離が起きない |
 | Fish Shell | 個別ファイル単位の symlink | `fisher` 等が自動生成するファイル (`fish_variables`, テーマ系) の repo 混入を防ぐ |
 | Fisher プラグイン | `fish_plugins` のみ追跡 + `fisher update` で復元 | プラグイン本体は upstream で管理されるため、リスト管理で十分 |
-| Codex CLI 設定 | コピー + マネージドブロック置換 | Codex が TUI 操作時に設定ファイル末尾を書き換えるため、symlink できない |
 | AWS config | `config.d/` のスニペットを連結して `~/.aws/config` に書き出す | プロファイルごとに分割管理しつつ、AWS CLI が読む単一ファイルを提供 |
+
+注: Codex CLI 設定 (`~/.codex/config.toml` / `~/.codex/AGENTS.md` / `~/.codex/hooks/` /
+`~/.codex/rules/` / `~/.agents/skills/`) は別 repo (claude.codex) で一元管理する。
+dotfiles 側では扱わない。詳細は claude.codex の `install.sh` と `docs/architecture.md` 参照。
 
 ## スクリプトの責務
 
 | スクリプト | 役割 |
 |-----------|------|
 | `install.sh` | 初回セットアップ。Brewfile 適用、symlink 作成、Git ローカル設定の対話的入力、Claude Code / mkcert / Fisher / Terraform のインストール、macOS defaults 適用 |
-| `update.sh` | 日常運用。symlink 再同期、Codex/AWS 設定の再展開、`brew bundle` + `brew upgrade`、Terraform 最新化、Npmfile からの `npm i -g` |
+| `update.sh` | 日常運用。symlink 再同期、AWS 設定の再展開、`brew bundle` + `brew upgrade`、Terraform 最新化、Npmfile からの `npm i -g` |
 | `lint.sh` | ShellCheck (Bash) / `fish --no-execute` / taplo (TOML) / `python3 -m json.tool` (JSON) を実行。GitHub Actions でも同等のチェックが走る |
 
 `install.sh` と `update.sh` は冪等。何度実行しても安全。
-
-## Codex CLI 設定の同期方式
-
-`~/.codex/config.toml` は **マネージドブロック方式** で管理する。
-symlink ではなくコピー + 部分置換を使うのは、Codex が TUI 操作時に
-`[projects.*]` / `[plugins.*]` をファイル末尾に追記するため、
-リポジトリから一方向 symlink できないため。
-
-```
-# ====== BEGIN: managed by dotfiles ======
-<.config/codex/config.toml の内容で置換される範囲>
-# ====== END: managed by dotfiles ======
-
-[projects."..."]      ← Codex が trust を追加した際に自動追記（保持される）
-[plugins."..."]       ← Codex がプラグインを有効化した際に自動追記（保持される）
-<その他のカスタム追記> ← マーカー外に書けば保持される
-```
-
-`install.sh` / `update.sh` で呼ばれる `ensure_codex_config`（`lib/codex.sh`）が以下を行う:
-
-1. **初回インストール**（`~/.codex/config.toml` 未存在）: テンプレートをそのままコピー
-2. **マーカーあり**: BEGIN/END の間をテンプレートで丸ごと置換。ブロック外は手つかず
-3. **マーカー未検出の既存ファイル**（マイグレーション）:
-   - `~/.codex/config.toml.bak.YYYYMMDD-HHMMSS` に自動バックアップ
-   - テンプレートを先頭に配置し、既存ファイルから `[projects.*]` / `[plugins.*]` のみ抽出して末尾に追加
-   - 上記以外の手動追記は保持されない（バックアップから手で戻す）
-
-用途別 profile（`routine` / `review` / `patch` / `research`）の設計意図は
-[claude リポジトリの codex-delegation ルール](../../../home/rules/codex-delegation.md) を参照。
 
 ## 個人情報・マシン依存設定の分離
 
@@ -99,13 +71,11 @@ symlink ではなくコピー + 部分置換を使うのは、Codex が TUI 操�
 | Git のユーザー名・メール | `~/.config/git/config.local` | `install.sh` 初回実行時に対話入力 |
 | SSH ホスト定義 | `~/.ssh/config.local` | 手動作成。`.config/ssh/config` から `Include` で読み込み |
 | Fisher テーマ系生成物 | `.config/fish/functions/.bobthefish_*.fish` 等 | `.gitignore` で除外 |
-| Codex プロジェクト trust / plugin 有効化 | `~/.codex/config.toml` のマーカー外 | Codex が自動追記 |
 
 ## よくある落とし穴
 
 - **Google Drive 同期で実行権限が落ちる**: `install.sh` / `update.sh` 冒頭で `chmod 755` を再付与している。手動で実行する前にエラーが出たら `bash` 経由で起動するか権限を再付与する
 - **Fisher プラグインの自動生成ファイルが repo に混入**: Fish の `functions/` を丸ごと symlink すると bobthefish 等のテーマファイルが repo に書き込まれる。これを防ぐため個別ファイル単位で symlink している（`links.conf` 参照）
-- **`~/.codex/config.toml` の手動追記が消える**: マネージドブロックの **外側** に書けば保持される。`[projects.*]` / `[plugins.*]` 以外のカスタム追記をしている場合は注意
 
 ## macOS 固有の設定ファイルパス
 
