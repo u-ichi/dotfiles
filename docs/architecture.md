@@ -23,7 +23,7 @@
 │   │   ├── config.fish         #   メイン設定 (PATH, alias)
 │   │   ├── fish_plugins        #   Fisher プラグイン一覧
 │   │   ├── completions/        #   補完定義 (gcloud, gsutil)
-│   │   └── functions/          #   カスタム関数 (claude.fish 等、テーマ系は .gitignore)
+│   │   └── functions/          #   カスタム関数 (claude/codex/ai-panes 等、テーマ系は .gitignore)
 │   ├── git/config              # Git 設定 (共通、個人情報は config.local に分離)
 │   ├── ssh/config              # SSH 設定 (Include のみ、ホスト定義は ~/.ssh/config.local に分離)
 │   ├── tmux/tmux.conf          # tmux 設定 (prefix: Ctrl+S)
@@ -70,6 +70,7 @@ dotfiles 側では扱わない。詳細は claude.codex の `install.sh` と `do
 |------|--------------|---------|
 | Git のユーザー名・メール | `~/.config/git/config.local` | `install.sh` 初回実行時に対話入力 |
 | SSH ホスト定義 | `~/.ssh/config.local` | 手動作成。`.config/ssh/config` から `Include` で読み込み |
+| Claude / Codex CLI worktree | `.claude/worktrees/`, `.codex/worktrees/` | 各 fish function の対話セレクタから作成 |
 | Fisher テーマ系生成物 | `.config/fish/functions/.bobthefish_*.fish` 等 | `.gitignore` で除外 |
 
 ## よくある落とし穴

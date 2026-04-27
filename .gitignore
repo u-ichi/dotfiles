@@ -3,6 +3,9 @@ CLAUDE.local.md
 .claude/settings.local.json
 .claude/worktrees/
 
+# Codex CLI
+.codex/worktrees/
+
 # macOS
 .DS_Store
 .AppleDouble
