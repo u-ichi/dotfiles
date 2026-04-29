@@ -58,6 +58,15 @@ if [ "$enabled" != "1" ]; then
   exit 1
 fi
 
+for key in c h v '"' %; do
+  binding="$(tmux_i list-keys -T prefix "$key" 2>/dev/null || true)"
+  if ! printf '%s\n' "$binding" | grep -q '#{pane_current_path}'; then
+    echo "ERROR: prefix+$key does not inherit pane_current_path" >&2
+    printf '%s\n' "$binding" >&2
+    exit 1
+  fi
+done
+
 client_hook="$(tmux_i show-hooks -g client-attached)"
 if ! printf '%s\n' "$client_hook" | grep -q 'ensure-ai-sidebars.sh'; then
   echo "ERROR: client-attached hook does not create sidebars" >&2
