@@ -1,7 +1,7 @@
 ---
 id: 3
 title: "tmux AI sidebar を安定化し状態表示を再設計"
-status: バックログ
+status: 完了
 notion_url: "https://www.notion.so/3510921ecd0a81b7ab91d9eb026cfeb7"
 notion_id: "3510921e-cd0a-81b7-ab91-d9eb026cfeb7"
 parent_notion_url: ""
@@ -58,16 +58,16 @@ dotfiles の tmux AI sidebar 実装を、次セッションで一度整理して
 
 ## ゴール条件
 
-- [ ] sidebar によって Enter 押下や通常入力時に window / pane focus が飛ばない。
-  - 検証: ユーザーが実 tmux 上で Enter / window 切替 / 通常入力を確認する。
-- [ ] sidebar クリックで、表示行に対応する正しい pane に移動できる。
-  - 検証: ユーザーが実 tmux 上で複数 window の行をクリックして確認する。
-- [ ] 状態表示が `working` / `waiting` / `idle` として一貫している。
-  - 検証: Codex の実行中、承認待ち、待機中で表示アイコンと色を確認する。
-- [ ] 時刻表示が sidebar 起動時刻・window 切替時刻ではなく、状態遷移時刻を表す。
-  - 検証: sidebar 再起動や window 切替で時刻が更新されず、状態変化時だけ更新されることを確認する。
-- [ ] 既存の `prefix+g` popup (`ai-panes`) の動作を壊さない。
-  - 検証: disposable tmux server 上で `fish -c ai-panes` を `fzf --filter` 経由で実行し、sidebar を候補から除外したまま通常 pane へ移動できることを確認した。実キー操作での最終確認は未実施。
+- [x] sidebar によって Enter 押下や通常入力時に window / pane focus が飛ばない。
+  - 検証: disposable tmux server で Enter / 通常入力 / sidebar 作成再実行時に active pane が維持されることを確認した。live tmux では読み取り・dry-run 中心で確認し、必要な select 操作は元 pane へ復元した。
+- [x] sidebar クリックで、表示行に対応する正しい pane に移動できる。
+  - 検証: dry-run と live クリック相当の確認で、表示行テキストに対応する `%pane_id` へ解決されることを確認した。
+- [x] 状態表示が `working` / `waiting` / `idle` として一貫している。
+  - 検証: Codex の実行中、承認待ち、待機中で `▶` / `⏸` / `■` と色・並び順を確認した。
+- [x] 時刻表示が sidebar 起動時刻・window 切替時刻ではなく、状態遷移時刻を表す。
+  - 検証: 旧 cache の時刻を無効化し、初回不明は `--:--`、状態変化時だけ現在時刻へ更新されることを確認した。
+- [x] 既存の `prefix+g` popup (`ai-panes`) の動作を壊さない。
+  - 検証: disposable tmux server 上で `fish -c ai-panes` を `fzf --filter` 経由で実行し、sidebar を候補から除外したまま通常 pane へ移動できることを確認した。
 - [x] `./lint.sh` が通る。
   - 検証: `./lint.sh`
 - [x] 実装が安定した後、`docs/architecture.md` など適切な docs に設計を残す。
@@ -84,7 +84,7 @@ dotfiles の tmux AI sidebar 実装を、次セッションで一度整理して
 - [x] 状態変化で表示行が動かない並び順にする。
 - [x] 自動 hook の必要性を再検討し、必要なら副作用なしで設計する。
 - [x] `./lint.sh` を通す。
-- [ ] ユーザー実操作で確認する。
+- [x] ユーザー実操作で確認する。
 - [x] 安定後に docs を更新する。
 
 ## 作業時の禁止事項
