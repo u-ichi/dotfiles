@@ -15,25 +15,24 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
         set -l line_texts
         set -l current_panes
         set -l now_hm (date +%H:%M)
-        set -l raw (tmux list-panes -s -F '#{window_index}.#{pane_index}	#{pane_title}	#{@fixed_title}	#{window_name}	#{@ai_sidebar}	#{pane_current_path}	#{window_index}	#{@ai_display_index}	#{pane_current_command}	#{pane_id}	#{@ai_state}	#{@ai_state_since}	#{@ai_state_version}' 2>/dev/null)
+        set -l raw (tmux list-panes -s -F '#{window_index}.#{pane_index}	#{pane_title}	#{@fixed_title}	#{@ai_sidebar}	#{pane_current_path}	#{window_index}	#{@ai_display_index}	#{pane_current_command}	#{pane_id}	#{@ai_state}	#{@ai_state_since}	#{@ai_state_version}' 2>/dev/null)
         set -l writer_pane (tmux list-panes -s -F '#{pane_id}	#{@ai_sidebar}' 2>/dev/null | awk -F '\t' '$2 == "1" {print $1; exit}')
         set -l is_writer 0
         test "$TMUX_PANE" = "$writer_pane"; and set is_writer 1
 
         set -l entries
         for line in $raw
-            set -l parts (string split -m 12 \t -- $line)
+            set -l parts (string split -m 11 \t -- $line)
             set -l loc $parts[1]
             set -l title $parts[2]
             set -l fixed_title $parts[3]
-            set -l window_name (string lower -- $parts[4])
-            set -l is_sidebar $parts[5]
-            set -l path $parts[6]
-            set -l command_name (string lower -- $parts[9])
-            set -l pane_id $parts[10]
-            set -l cached_state $parts[11]
-            set -l state_since $parts[12]
-            set -l cached_version $parts[13]
+            set -l is_sidebar $parts[4]
+            set -l path $parts[5]
+            set -l command_name (string lower -- $parts[8])
+            set -l pane_id $parts[9]
+            set -l cached_state $parts[10]
+            set -l state_since $parts[11]
+            set -l cached_version $parts[12]
 
             test "$loc" = (tmux display-message -p -t "$TMUX_PANE" '#{window_index}.#{pane_index}' 2>/dev/null); and continue
             test "$is_sidebar" = 1; and continue
@@ -42,8 +41,6 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             set -l display
             set -l is_codex_console 0
             if string match -q '*codex*' -- $command_name
-                set is_codex_console 1
-            else if string match -q '*codex*' -- $window_name
                 set is_codex_console 1
             else if string match -q '*Context *% used*' -- $title
                 set is_codex_console 1
@@ -64,6 +61,8 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
                 if string match -q '*Press enter to confirm or esc to cancel*' -- $visible
                     set codex_approval_waiting 1
                 else if string match -q '*Working (*' -- $visible
+                    set codex_working 1
+                else if string match -q '*Waiting for background terminal*' -- $visible
                     set codex_working 1
                 else if string match -q '*background terminal running*' -- $visible
                     set codex_working 1

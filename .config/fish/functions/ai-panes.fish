@@ -9,8 +9,8 @@ function ai-panes --description 'Jump to an AI CLI pane in the current tmux sess
     # 各 pane を tab 区切り 6 フィールドで取得。pane_title には "|" が入ることがある。
     # pane_title: Claude Code が送る OSC 2 の状態 marker 判定に使う。
     # fixed_title: 手動固定タイトル。設定されていれば表示名として最優先する。
-    # window_name: rename-windows.sh が argv[0] から付けた claude / codex 判定に使う。
-    set -l raw (tmux list-panes -s -F '#{window_index}.#{pane_index}	#{pane_title}	#{@fixed_title}	#{window_name}	#{@ai_sidebar}	#{pane_current_path}')
+    # pane_current_command: window 全体ではなく pane 固有の codex / claude 判定に使う。
+    set -l raw (tmux list-panes -s -F '#{window_index}.#{pane_index}	#{pane_title}	#{@fixed_title}	#{@ai_sidebar}	#{pane_current_path}	#{pane_current_command}')
 
     # 状態判定して 3 バケツに振り分け:
     #   ✳ 始まり                      = Claude が user 入力待ち (最優先)
@@ -24,15 +24,15 @@ function ai-panes --description 'Jump to an AI CLI pane in the current tmux sess
         set -l loc $parts[1]
         set -l title $parts[2]
         set -l fixed_title $parts[3]
-        set -l window_name (string lower -- $parts[4])
-        set -l is_sidebar $parts[5]
-        set -l path $parts[6]
+        set -l is_sidebar $parts[4]
+        set -l path $parts[5]
+        set -l command_name (string lower -- $parts[6])
 
         test "$is_sidebar" = 1; and continue
 
         set -l display
         set -l is_codex_console 0
-        if string match -q '*codex*' -- $window_name
+        if string match -q '*codex*' -- $command_name
             set is_codex_console 1
         else if string match -q '*Context *% used*' -- $title
             set is_codex_console 1
@@ -52,7 +52,7 @@ function ai-panes --description 'Jump to an AI CLI pane in the current tmux sess
             set -a working "$loc  ◐ 動作中  │  $display"
         else if test "$is_codex_console" = 1
             set -a idle "$loc  ○ Codex   │  $display"
-        else if string match -q '*claude*' -- $window_name
+        else if string match -q '*claude*' -- $command_name
             set -a idle "$loc  ○ Claude  │  $display"
         else
             set -a idle "$loc  ○ シェル  │  $display"

@@ -96,7 +96,9 @@ sidebar の既定幅は 26 cells とし、既存 pane の kill / resize を自�
 新規 window 作成時に hook から不足分の sidebar を作成する。`prefix+G` は既存 window に sidebar が
 無い場合の再同期用として `ensure-ai-sidebars.sh` を実行する。
 
-状態表示は `working` / `waiting` / `idle` の 3 種類に正規化する。表示時刻は sidebar 起動時刻や
+状態表示は `working` / `waiting` / `idle` の 3 種類に正規化する。Codex の
+`Working (` / `Waiting for background terminal` / `background terminal running` は `working`、
+承認 prompt は `waiting` として扱う。表示時刻は sidebar 起動時刻や
 window 切替時刻ではなく、状態が変化した時刻を示す。状態と遷移時刻は対象 pane の
 `@ai_state` / `@ai_state_since` option に保持し、`@ai_state_version` で古い形式の値を無効化する。
 sidebar 起動時点で過去の遷移時刻を復元できない pane は `--:--` と表示する。
@@ -108,7 +110,7 @@ Codex 起動直後の `project | Context ... used` title は status line 由来�
 `update-ai-display-indexes.sh` だけを呼び、sidebar 作成や layout 変更は行わない。
 表示順は `working` → `waiting` → `idle` を第一キーにする。`working` / `waiting` では状態遷移時刻の
 新しいものを上、古いものを下に出す。`idle` では LLM console (`pane_current_command` /
-`window_name` / Codex の `Context ... used` title が codex / claude 系) を通常 shell pane
+Codex の `Context ... used` title が codex / claude 系) を通常 shell pane
 より先に出し、その中で状態遷移時刻の新しいものを上に出す。LLM console は neutral navy の背景色、
 通常 shell pane は gray foreground で区別する。
 
