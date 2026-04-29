@@ -87,6 +87,26 @@ dotfiles の tmux AI sidebar 実装を、次セッションで一度整理して
 - [x] ユーザー実操作で確認する。
 - [x] 安定後に docs を更新する。
 
+## 2026-04-29 現状整理
+
+完了済み:
+
+- [x] sidebar の責務分離、状態表示、状態遷移時刻、クリック target、表示番号の整理
+- [x] Codex 起動直後の menubar 由来 title を通常 shell 扱いしない表示補正
+- [x] `@ai_display_index` による通常 pane の表示番号安定化
+- [x] 新規 window 作成後にも sidebar を作る `after-new-window` hook
+- [x] tmux client attach 時にも sidebar を作る `client-attached` hook
+- [x] 停止中 (`idle`) グループ内で AI session を通常 shell より上に出す並び順
+- [x] sidebar を常時 ON にする `@ai_sidebars_enabled=1` 既定化
+- [x] default tmux server を落とさないための専用 socket 検証スクリプト追加
+
+未完 / 判断待ち:
+
+- [ ] この差分の commit / push
+- [ ] live tmux への反映はユーザー操作で行う（agent は明示指示なしに live tmux を操作しない）
+- [ ] backlog #03 を `docs/backlog/done/` に移すか判断する
+- [ ] Ghostty 通知は backlog #02 の別作業として残す
+
 ## 作業時の禁止事項
 
 - live tmux の focus を動かす検証を勝手に実行しない。

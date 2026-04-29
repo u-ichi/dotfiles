@@ -45,6 +45,15 @@ else
 fi
 echo ""
 
+# === tmux isolated tests ===
+echo "=== tmux isolated tests ==="
+if command -v tmux &>/dev/null && command -v fish &>/dev/null; then
+  "$SCRIPT_DIR/.config/tmux/test-ai-sidebars-isolated.sh" || errors=$((errors + 1))
+else
+  echo "  スキップ: tmux または fish がインストールされていません"
+fi
+echo ""
+
 # === taplo (TOML) ===
 echo "=== TOML ==="
 if command -v taplo &>/dev/null; then

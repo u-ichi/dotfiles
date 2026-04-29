@@ -31,6 +31,7 @@
 │   ├── tmux/ensure-ai-sidebars.sh # tmux AI sidebar の作成
 │   ├── tmux/update-ai-display-indexes.sh # tmux AI sidebar 用表示番号の再採番
 │   ├── tmux/ai-sidebar-click.sh   # tmux AI sidebar のクリック解決
+│   ├── tmux/test-ai-sidebars-isolated.sh # 専用 socket 上の tmux AI sidebar 検証
 │   ├── ghostty/config          # Ghostty ターミナル設定
 │   ├── glow/glow.yml           # Glow (markdown viewer) 設定
 │   └── karabiner/              # Karabiner-Elements キーリマップ
@@ -62,11 +63,12 @@ dotfiles 側では扱わない。詳細は claude.codex の `install.sh` と `do
 |-----------|------|
 | `install.sh` | 初回セットアップ。Brewfile 適用、symlink 作成、Git ローカル設定の対話的入力、Claude Code / mkcert / Fisher / Terraform のインストール、macOS defaults 適用 |
 | `update.sh` | 日常運用。symlink 再同期、AWS 設定の再展開、`brew bundle` + `brew upgrade`、Terraform 最新化、Npmfile からの `npm i -g` |
-| `lint.sh` | ShellCheck (Bash) / `fish --no-execute` / taplo (TOML) / `python3 -m json.tool` (JSON) を実行。GitHub Actions でも同等のチェックが走る |
+| `lint.sh` | ShellCheck (Bash) / `fish --no-execute` / tmux isolated smoke test / taplo (TOML) / `python3 -m json.tool` (JSON) を実行。GitHub Actions でも同等の静的チェックが走る |
 | `.config/tmux/rename-windows.sh` | tmux window 名を active な通常 pane のプロセス名から更新する。AI sidebar pane が active の場合は最初の通常 pane を基準にする |
 | `.config/tmux/ensure-ai-sidebars.sh` | 各 tmux window に AI pane 一覧 sidebar が無ければ作成する。既存 sidebar の kill / resize は行わない |
 | `.config/tmux/update-ai-display-indexes.sh` | tmux pane の増減後に AI sidebar 用の表示番号 (`@ai_display_index`) だけを再採番する。sidebar の作成や layout 変更は行わない |
 | `.config/tmux/ai-sidebar-click.sh` | AI sidebar のクリック行から対象 pane を解決して移動する。`AI_SIDEBAR_CLICK_DRY_RUN=1` では対象 pane の出力だけ行う |
+| `.config/tmux/test-ai-sidebars-isolated.sh` | 専用 socket の disposable tmux server だけを使い、sidebar 既定有効化と新規 window hook を検証する |
 
 `install.sh` と `update.sh` は冪等。何度実行しても安全。
 
@@ -90,9 +92,9 @@ sidebar は責務を 3 つに分ける。
 
 sidebar の既定幅は 26 cells とし、既存 pane の kill / resize を自動では行わない。幅を変えたい場合は
 `ensure-ai-sidebars.sh <width>` で新規作成時の幅だけ指定するか、対象 sidebar に対して手動で
-`tmux resize-pane` を実行する。`prefix+G` は `@ai_sidebars_enabled` を有効化して既存 window に
-sidebar を作る。有効化後に作られた新規 window は `after-new-window` hook から不足分の sidebar を
-作成する。
+`tmux resize-pane` を実行する。`@ai_sidebars_enabled` は既定で有効化し、tmux client attach 時と
+新規 window 作成時に hook から不足分の sidebar を作成する。`prefix+G` は既存 window に sidebar が
+無い場合の再同期用として `ensure-ai-sidebars.sh` を実行する。
 
 状態表示は `working` / `waiting` / `idle` の 3 種類に正規化する。表示時刻は sidebar 起動時刻や
 window 切替時刻ではなく、状態が変化した時刻を示す。状態と遷移時刻は対象 pane の
@@ -121,9 +123,13 @@ LLM console が通常 shell 扱いになる。
 tmux の `pane-scrollbars` は copy/view mode で右端に 1 カラムの scrollbar を出し、折り返し位置を
 変えるため無効化する。
 
-通常入力や window 切替で focus が飛ぶのを避けるため、sidebar 作成は `prefix+G` の手動実行と
-有効化後の `after-new-window` に限定する。`pane-focus-in` / `after-select-window` などの hook から
+通常入力や window 切替で focus が飛ぶのを避けるため、sidebar 作成は `client-attached` /
+`after-new-window` / `prefix+G` に限定する。`pane-focus-in` / `after-select-window` などの hook から
 sidebar 作成や layout 変更は行わない。
+
+tmux 設定や sidebar 挙動の検証では、default tmux server に対して `kill-server` を実行しない。
+動作検証は `.config/tmux/test-ai-sidebars-isolated.sh` を使い、専用 socket の disposable server
+だけを作成・破棄する。
 
 ## 個人情報・マシン依存設定の分離
 
