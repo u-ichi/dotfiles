@@ -15,14 +15,14 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
         set -l line_texts
         set -l current_panes
         set -l now_hm (date +%H:%M)
-        set -l raw (tmux list-panes -s -F '#{window_index}.#{pane_index}|#{pane_title}|#{@fixed_title}|#{window_name}|#{@ai_sidebar}|#{pane_current_path}|#{window_index}|#{@ai_display_index}|#{pane_current_command}|#{pane_id}|#{@ai_state}|#{@ai_state_since}|#{@ai_state_version}' 2>/dev/null)
+        set -l raw (tmux list-panes -s -F '#{window_index}.#{pane_index}	#{pane_title}	#{@fixed_title}	#{window_name}	#{@ai_sidebar}	#{pane_current_path}	#{window_index}	#{@ai_display_index}	#{pane_current_command}	#{pane_id}	#{@ai_state}	#{@ai_state_since}	#{@ai_state_version}' 2>/dev/null)
         set -l writer_pane (tmux list-panes -s -F '#{pane_id}	#{@ai_sidebar}' 2>/dev/null | awk -F '\t' '$2 == "1" {print $1; exit}')
         set -l is_writer 0
         test "$TMUX_PANE" = "$writer_pane"; and set is_writer 1
 
         set -l entries
         for line in $raw
-            set -l parts (string split -m 12 '|' -- $line)
+            set -l parts (string split -m 12 \t -- $line)
             set -l loc $parts[1]
             set -l title $parts[2]
             set -l fixed_title $parts[3]
@@ -40,9 +40,18 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             set -a current_panes "$pane_id"
 
             set -l display
+            set -l is_codex_console 0
+            if string match -q '*codex*' -- $command_name
+                set is_codex_console 1
+            else if string match -q '*codex*' -- $window_name
+                set is_codex_console 1
+            else if string match -q '*Context *% used*' -- $title
+                set is_codex_console 1
+            end
+
             if test -n "$fixed_title"
                 set display $fixed_title
-            else if string match -q '*codex*' -- $command_name; and test "$title" = (basename "$path")
+            else if test "$is_codex_console" = 1; and test "$title" = (basename "$path")
                 set display (string replace "$HOME" "~" -- "$path")
             else
                 set display $title
@@ -50,7 +59,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
 
             set -l codex_approval_waiting 0
             set -l codex_working 0
-            if string match -q '*codex*' -- $command_name
+            if test "$is_codex_console" = 1
                 set -l visible (tmux capture-pane -p -J -t "$pane_id" 2>/dev/null | tail -8)
                 if string match -q '*Press enter to confirm or esc to cancel*' -- $visible
                     set codex_approval_waiting 1
@@ -62,7 +71,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             end
 
             set -l is_llm_console 0
-            if string match -q '*codex*' -- $command_name
+            if test "$is_codex_console" = 1
                 set is_llm_console 1
             else if string match -q '*claude*' -- $command_name
                 set is_llm_console 1
@@ -106,16 +115,23 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
                 tmux set-option -p -t "$pane_id" @ai_state_version "$state_version" 2>/dev/null
             end
 
+            set -l state_sort_key 0000
+            if string match -qr '^[0-9][0-9]:[0-9][0-9]$' -- "$state_since"
+                set state_sort_key (string replace ':' '' -- "$state_since")
+            end
+            set -l kind_sort_key 0
+            test "$console_kind" = llm; and set kind_sort_key 1
+
             if test "$display_state" = waiting
                 set -l row (printf '%s ⏸ %s' "$state_since" "$display")
-                set -a entries (printf 'waiting\t%s\tyellow\t%s\t%s' "$console_kind" "$row" "$pane_id")
+                set -a entries (printf 'waiting\t%s\t%s\t%s\tyellow\t%s\t%s' "$state_sort_key" "$kind_sort_key" "$console_kind" "$row" "$pane_id")
             else if test "$display_state" = working
                 set -l row (printf '%s ▶ %s' "$state_since" "$display")
-                set -a entries (printf 'working\t%s\tgreen\t%s\t%s' "$console_kind" "$row" "$pane_id")
+                set -a entries (printf 'working\t%s\t%s\t%s\tgreen\t%s\t%s' "$state_sort_key" "$kind_sort_key" "$console_kind" "$row" "$pane_id")
             else if test "$is_llm_console" = 1
-                set -a entries (printf 'idle\t%s\tnormal\t%s\t%s' "$console_kind" (printf '%s ■ %s' "$state_since" "$display") "$pane_id")
+                set -a entries (printf 'idle\t%s\t%s\t%s\tnormal\t%s\t%s' "$state_sort_key" "$kind_sort_key" "$console_kind" (printf '%s ■ %s' "$state_since" "$display") "$pane_id")
             else
-                set -a entries (printf 'idle\t%s\tgray\t%s\t%s' "$console_kind" (printf '%s ■ %s' "$state_since" "$display") "$pane_id")
+                set -a entries (printf 'idle\t%s\t%s\t%s\tgray\t%s\t%s' "$state_sort_key" "$kind_sort_key" "$console_kind" (printf '%s ■ %s' "$state_since" "$display") "$pane_id")
             end
         end
 
@@ -127,34 +143,31 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
         set -l max_line_chars (math "max(20, $pane_width - 1)")
         set -l llm_bg_color 2a2a44
         for bucket in working waiting idle
-            for kind in llm other
-                for item in $entries
-                    set -l row_parts (string split -m 4 \t -- "$item")
-                    set -l row_bucket $row_parts[1]
-                    set -l row_kind $row_parts[2]
-                    set -l row_color $row_parts[3]
-                    set -l row_text $row_parts[4]
-                    set -l row_target $row_parts[5]
-                    test "$row_bucket" = "$bucket"; or continue
-                    test "$row_kind" = "$kind"; or continue
+            for item in (printf '%s\n' $entries | sort -r)
+                set -l row_parts (string split -m 6 \t -- "$item")
+                set -l row_bucket $row_parts[1]
+                set -l row_kind $row_parts[4]
+                set -l row_color $row_parts[5]
+                set -l row_text $row_parts[6]
+                set -l row_target $row_parts[7]
+                test "$row_bucket" = "$bucket"; or continue
 
-                    set -l short_row (string shorten -m $max_line_chars -- "$row_text")
-                    set -l color_prefix
-                    if test "$row_kind" = llm
-                        set color_prefix (set_color -b $llm_bg_color)
-                    end
-                    if test "$row_color" = yellow
-                        set -a lines " "$color_prefix(set_color yellow)$short_row(set_color normal)
-                    else if test "$row_color" = green
-                        set -a lines " "$color_prefix(set_color green)$short_row(set_color normal)
-                    else if test "$row_color" = gray
-                        set -a lines " "(set_color 666666)$short_row(set_color normal)
-                    else
-                        set -a lines " "$color_prefix$short_row(set_color normal)
-                    end
-                    set -a line_texts " "$short_row
-                    set -a line_targets "$row_target"
+                set -l short_row (string shorten -m $max_line_chars -- "$row_text")
+                set -l color_prefix
+                if test "$row_kind" = llm
+                    set color_prefix (set_color -b $llm_bg_color)
                 end
+                if test "$row_color" = yellow
+                    set -a lines " "$color_prefix(set_color yellow)$short_row(set_color normal)
+                else if test "$row_color" = green
+                    set -a lines " "$color_prefix(set_color green)$short_row(set_color normal)
+                else if test "$row_color" = gray
+                    set -a lines " "(set_color 666666)$short_row(set_color normal)
+                else
+                    set -a lines " "$color_prefix$short_row(set_color normal)
+                end
+                set -a line_texts " "$short_row
+                set -a line_targets "$row_target"
             end
         end
 

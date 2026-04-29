@@ -6,11 +6,11 @@ function ai-panes --description 'Jump to an AI CLI pane in the current tmux sess
 
     set -l session (tmux display-message -p '#S')
 
-    # 各 pane を 6 フィールド "<loc>|<pane_title>|<fixed_title>|<window_name>|<is_sidebar>|<path>" で取得。
+    # 各 pane を tab 区切り 6 フィールドで取得。pane_title には "|" が入ることがある。
     # pane_title: Claude Code が送る OSC 2 の状態 marker 判定に使う。
     # fixed_title: 手動固定タイトル。設定されていれば表示名として最優先する。
     # window_name: rename-windows.sh が argv[0] から付けた claude / codex 判定に使う。
-    set -l raw (tmux list-panes -s -F '#{window_index}.#{pane_index}|#{pane_title}|#{@fixed_title}|#{window_name}|#{@ai_sidebar}|#{pane_current_path}')
+    set -l raw (tmux list-panes -s -F '#{window_index}.#{pane_index}	#{pane_title}	#{@fixed_title}	#{window_name}	#{@ai_sidebar}	#{pane_current_path}')
 
     # 状態判定して 3 バケツに振り分け:
     #   ✳ 始まり                      = Claude が user 入力待ち (最優先)
@@ -20,7 +20,7 @@ function ai-panes --description 'Jump to an AI CLI pane in the current tmux sess
     set -l working
     set -l idle
     for line in $raw
-        set -l parts (string split -m 5 '|' -- $line)
+        set -l parts (string split -m 5 \t -- $line)
         set -l loc $parts[1]
         set -l title $parts[2]
         set -l fixed_title $parts[3]
@@ -31,9 +31,16 @@ function ai-panes --description 'Jump to an AI CLI pane in the current tmux sess
         test "$is_sidebar" = 1; and continue
 
         set -l display
+        set -l is_codex_console 0
+        if string match -q '*codex*' -- $window_name
+            set is_codex_console 1
+        else if string match -q '*Context *% used*' -- $title
+            set is_codex_console 1
+        end
+
         if test -n "$fixed_title"
             set display $fixed_title
-        else if string match -q '*codex*' -- $window_name; and test "$title" = (basename "$path")
+        else if test "$is_codex_console" = 1; and test "$title" = (basename "$path")
             set display (string replace "$HOME" "~" -- "$path")
         else
             set display $title
@@ -43,7 +50,7 @@ function ai-panes --description 'Jump to an AI CLI pane in the current tmux sess
             set -a waiting "$loc  ● 待ち    │  $display"
         else if string match -qr '^[⠀-⣿]' -- $title
             set -a working "$loc  ◐ 動作中  │  $display"
-        else if string match -q '*codex*' -- $window_name
+        else if test "$is_codex_console" = 1
             set -a idle "$loc  ○ Codex   │  $display"
         else if string match -q '*claude*' -- $window_name
             set -a idle "$loc  ○ Claude  │  $display"

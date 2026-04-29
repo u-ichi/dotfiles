@@ -15,9 +15,36 @@ function __codex_reset_pane_title
     set -l title (basename "$PWD")
     tmux select-pane -t "$TMUX_PANE" -T "$title" 2>/dev/null
     tmux set-option -p -t "$TMUX_PANE" @fixed_title "" 2>/dev/null
+    tmux set-option -p -t "$TMUX_PANE" @ai_base_title "" 2>/dev/null
+end
+
+function __codex_set_pane_base_title
+    if not set -q TMUX
+        return
+    end
+    if not set -q TMUX_PANE
+        return
+    end
+
+    set -l path "$PWD"
+    set -l argc (count $argv)
+    if test $argc -gt 0
+        for i in (seq $argc)
+            switch $argv[$i]
+                case -C --cd
+                    set -l next (math $i + 1)
+                    if test $next -le $argc
+                        set path $argv[$next]
+                    end
+            end
+        end
+    end
+
+    tmux set-option -p -t "$TMUX_PANE" @ai_base_title (basename "$path") 2>/dev/null
 end
 
 function __codex_run_interactive
+    __codex_set_pane_base_title $argv
     command codex $argv
     set -l exit_code $status
     __codex_reset_pane_title

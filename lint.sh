@@ -36,6 +36,15 @@ else
 fi
 echo ""
 
+# === Fish smoke tests ===
+echo "=== Fish smoke tests ==="
+if command -v fish &>/dev/null; then
+  fish -c "source '$SCRIPT_DIR/.config/fish/functions/codex.fish'; __codex_set_pane_base_title" || errors=$((errors + 1))
+else
+  echo "  スキップ: fish がインストールされていません"
+fi
+echo ""
+
 # === taplo (TOML) ===
 echo "=== TOML ==="
 if command -v taplo &>/dev/null; then
