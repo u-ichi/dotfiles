@@ -54,17 +54,31 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
                 set display $title
             end
 
-            set -l codex_approval_waiting 0
+            set -l codex_user_waiting 0
             set -l codex_working 0
             if test "$is_codex_console" = 1
-                set -l visible (tmux capture-pane -p -J -t "$pane_id" 2>/dev/null | tail -8)
-                if string match -q '*Press enter to confirm or esc to cancel*' -- $visible
-                    set codex_approval_waiting 1
-                else if string match -q '*Working (*' -- $visible
+                set -l visible (tmux capture-pane -p -J -t "$pane_id" 2>/dev/null | tail -24)
+                set -l signal_lines
+                for line in $visible
+                    if not string match -qr '^\s*(diff --git|index |--- |\+\+\+ |@@|[+-])' -- $line
+                        set -a signal_lines $line
+                    end
+                end
+                if string match -q '*Press enter to confirm or esc to cancel*' -- $signal_lines
+                    set codex_user_waiting 1
+                else if string match -q '*Would you like to run the following command?*' -- $signal_lines; and string match -qr '(Yes, proceed \(y\)|No, and tell Codex what to do differently)' -- $signal_lines
+                    set codex_user_waiting 1
+                else if string match -q '*Conversation interrupted - tell the model what to do differently*' -- $signal_lines
+                    set codex_user_waiting 1
+                else if string match -q '*To continue this session, run codex resume*' -- $signal_lines
+                    set codex_user_waiting 1
+                else if string match -qr '(承認してください|承認をお願いします|実行してよいですか|OK.*返してください|どう進めますか|どうしますか|どちらにしますか|ご指示ください)' -- $signal_lines
+                    set codex_user_waiting 1
+                else if string match -q '*Working (*' -- $signal_lines
                     set codex_working 1
-                else if string match -q '*Waiting for background terminal*' -- $visible
+                else if string match -q '*Waiting for background terminal*' -- $signal_lines
                     set codex_working 1
-                else if string match -q '*background terminal running*' -- $visible
+                else if string match -q '*background terminal running*' -- $signal_lines
                     set codex_working 1
                 end
             end
@@ -79,7 +93,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             test "$is_llm_console" = 1; and set console_kind llm
 
             set -l detected_state idle
-            if test "$codex_approval_waiting" = 1
+            if test "$codex_user_waiting" = 1
                 set detected_state waiting
             else if string match -q '✳*' -- $title
                 set detected_state waiting
@@ -122,7 +136,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             test "$console_kind" = llm; and set kind_sort_key 1
 
             if test "$display_state" = waiting
-                set -l row (printf '%s ⏸ %s' "$state_since" "$display")
+                set -l row (printf '%s ? %s' "$state_since" "$display")
                 set -a entries (printf 'waiting\t%s\t%s\t%s\tyellow\t%s\t%s' "$state_sort_key" "$kind_sort_key" "$console_kind" "$row" "$pane_id")
             else if test "$display_state" = working
                 set -l row (printf '%s ▶ %s' "$state_since" "$display")
