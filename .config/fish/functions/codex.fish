@@ -16,6 +16,18 @@ function __codex_reset_pane_title
     tmux select-pane -t "$TMUX_PANE" -T "$title" 2>/dev/null
     tmux set-option -p -t "$TMUX_PANE" @fixed_title "" 2>/dev/null
     tmux set-option -p -t "$TMUX_PANE" @ai_base_title "" 2>/dev/null
+    tmux set-option -p -t "$TMUX_PANE" @ai_input_app "" 2>/dev/null
+end
+
+function __codex_mark_pane_input_app
+    if not set -q TMUX
+        return
+    end
+    if not set -q TMUX_PANE
+        return
+    end
+
+    tmux set-option -p -t "$TMUX_PANE" @ai_input_app codex 2>/dev/null
 end
 
 function __codex_set_pane_base_title
@@ -44,6 +56,7 @@ function __codex_set_pane_base_title
 end
 
 function __codex_run_interactive
+    __codex_mark_pane_input_app
     __codex_set_pane_base_title $argv
     command codex $argv
     set -l exit_code $status
