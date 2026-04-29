@@ -129,9 +129,9 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
                 set -l row (printf '%s ▶ %s' "$state_since" "$display")
                 set -a entries (printf 'working\t%s\t%s\t%s\tgreen\t%s\t%s' "$state_sort_key" "$kind_sort_key" "$console_kind" "$row" "$pane_id")
             else if test "$is_llm_console" = 1
-                set -a entries (printf 'idle\t%s\t%s\t%s\tnormal\t%s\t%s' "$state_sort_key" "$kind_sort_key" "$console_kind" (printf '%s ■ %s' "$state_since" "$display") "$pane_id")
+                set -a entries (printf 'idle\t%s\t%s\t%s\tnormal\t%s\t%s' "$kind_sort_key" "$state_sort_key" "$console_kind" (printf '%s ■ %s' "$state_since" "$display") "$pane_id")
             else
-                set -a entries (printf 'idle\t%s\t%s\t%s\tgray\t%s\t%s' "$state_sort_key" "$kind_sort_key" "$console_kind" (printf '%s ■ %s' "$state_since" "$display") "$pane_id")
+                set -a entries (printf 'idle\t%s\t%s\t%s\tgray\t%s\t%s' "$kind_sort_key" "$state_sort_key" "$console_kind" (printf '%s ■ %s' "$state_since" "$display") "$pane_id")
             end
         end
 

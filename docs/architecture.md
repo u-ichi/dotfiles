@@ -90,7 +90,9 @@ sidebar は責務を 3 つに分ける。
 
 sidebar の既定幅は 26 cells とし、既存 pane の kill / resize を自動では行わない。幅を変えたい場合は
 `ensure-ai-sidebars.sh <width>` で新規作成時の幅だけ指定するか、対象 sidebar に対して手動で
-`tmux resize-pane` を実行する。
+`tmux resize-pane` を実行する。`prefix+G` は `@ai_sidebars_enabled` を有効化して既存 window に
+sidebar を作る。有効化後に作られた新規 window は `after-new-window` hook から不足分の sidebar を
+作成する。
 
 状態表示は `working` / `waiting` / `idle` の 3 種類に正規化する。表示時刻は sidebar 起動時刻や
 window 切替時刻ではなく、状態が変化した時刻を示す。状態と遷移時刻は対象 pane の
@@ -102,10 +104,11 @@ Codex 起動直後の `project | Context ... used` title は status line 由来�
 `#{pane_title}` をそのまま表示する。
 `@ai_display_index` は `after-split-window` / `after-kill-pane` hook で再採番する。hook からは
 `update-ai-display-indexes.sh` だけを呼び、sidebar 作成や layout 変更は行わない。
-表示順は `working` → `waiting` → `idle` を第一キーにし、同じ状態内では状態遷移時刻の
-新しいものを上、古いものを下に出す。同時刻では LLM console (`pane_current_command` /
+表示順は `working` → `waiting` → `idle` を第一キーにする。`working` / `waiting` では状態遷移時刻の
+新しいものを上、古いものを下に出す。`idle` では LLM console (`pane_current_command` /
 `window_name` / Codex の `Context ... used` title が codex / claude 系) を通常 shell pane
-より先に出す。LLM console は neutral navy の背景色、通常 shell pane は gray foreground で区別する。
+より先に出し、その中で状態遷移時刻の新しいものを上に出す。LLM console は neutral navy の背景色、
+通常 shell pane は gray foreground で区別する。
 
 クリック target は window index / pane index ではなく `%pane_id` を正とする。pane index は
 sidebar の追加・削除で変化しやすいため、表示行と移動先の対応には使わない。
@@ -118,8 +121,9 @@ LLM console が通常 shell 扱いになる。
 tmux の `pane-scrollbars` は copy/view mode で右端に 1 カラムの scrollbar を出し、折り返し位置を
 変えるため無効化する。
 
-通常入力や window 切替で focus が飛ぶのを避けるため、sidebar 作成は `prefix+G` の手動実行に寄せる。
-`pane-focus-in` / `after-select-window` などの hook から sidebar 作成や layout 変更は行わない。
+通常入力や window 切替で focus が飛ぶのを避けるため、sidebar 作成は `prefix+G` の手動実行と
+有効化後の `after-new-window` に限定する。`pane-focus-in` / `after-select-window` などの hook から
+sidebar 作成や layout 変更は行わない。
 
 ## 個人情報・マシン依存設定の分離
 
