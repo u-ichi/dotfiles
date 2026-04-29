@@ -23,10 +23,13 @@
 │   │   ├── config.fish         #   メイン設定 (PATH, alias)
 │   │   ├── fish_plugins        #   Fisher プラグイン一覧
 │   │   ├── completions/        #   補完定義 (gcloud, gsutil)
-│   │   └── functions/          #   カスタム関数 (claude/codex/ai-panes 等、テーマ系は .gitignore)
+│   │   └── functions/          #   カスタム関数 (claude/codex/ai-panes/sidebar 等、テーマ系は .gitignore)
 │   ├── git/config              # Git 設定 (共通、個人情報は config.local に分離)
 │   ├── ssh/config              # SSH 設定 (Include のみ、ホスト定義は ~/.ssh/config.local に分離)
 │   ├── tmux/tmux.conf          # tmux 設定 (prefix: Ctrl+S)
+│   ├── tmux/rename-windows.sh  # tmux window 名の自動更新
+│   ├── tmux/ensure-ai-sidebars.sh # tmux AI sidebar の作成
+│   ├── tmux/ai-sidebar-click.sh   # tmux AI sidebar のクリック解決
 │   ├── ghostty/config          # Ghostty ターミナル設定
 │   ├── glow/glow.yml           # Glow (markdown viewer) 設定
 │   └── karabiner/              # Karabiner-Elements キーリマップ
@@ -59,8 +62,52 @@ dotfiles 側では扱わない。詳細は claude.codex の `install.sh` と `do
 | `install.sh` | 初回セットアップ。Brewfile 適用、symlink 作成、Git ローカル設定の対話的入力、Claude Code / mkcert / Fisher / Terraform のインストール、macOS defaults 適用 |
 | `update.sh` | 日常運用。symlink 再同期、AWS 設定の再展開、`brew bundle` + `brew upgrade`、Terraform 最新化、Npmfile からの `npm i -g` |
 | `lint.sh` | ShellCheck (Bash) / `fish --no-execute` / taplo (TOML) / `python3 -m json.tool` (JSON) を実行。GitHub Actions でも同等のチェックが走る |
+| `.config/tmux/rename-windows.sh` | tmux window 名を active な通常 pane のプロセス名から更新する。AI sidebar pane が active の場合は最初の通常 pane を基準にする |
+| `.config/tmux/ensure-ai-sidebars.sh` | 各 tmux window に AI pane 一覧 sidebar が無ければ作成する。既存 sidebar の kill / resize は行わない |
+| `.config/tmux/ai-sidebar-click.sh` | AI sidebar のクリック行から対象 pane を解決して移動する。`AI_SIDEBAR_CLICK_DRY_RUN=1` では対象 pane の出力だけ行う |
 
 `install.sh` と `update.sh` は冪等。何度実行しても安全。
+
+## tmux AI pane navigation
+
+tmux の AI pane 移動は popup と sidebar の 2 系統を持つ。
+
+| UI | 起動 | 役割 |
+|----|------|------|
+| popup | `prefix+g` | `fish -c ai-panes` を開き、fzf で現在 session の AI / shell pane を選んで移動する |
+| sidebar | `prefix+G` | 各 window 左端に AI pane 一覧を表示する sidebar を作成する |
+
+sidebar は責務を 3 つに分ける。
+
+| ファイル | 責務 |
+|----------|------|
+| `.config/tmux/ensure-ai-sidebars.sh` | sidebar pane の作成と通常 pane の表示番号 (`@ai_display_index`) 付与 |
+| `.config/fish/functions/ai-panes-sidebar.fish` | pane 一覧の表示、状態検出、状態遷移時刻、表示行ごとの click target (`@ai_click_target_N`) 更新 |
+| `.config/tmux/ai-sidebar-click.sh` | クリックされた表示行を `%pane_id` に解決し、対象 window / pane へ移動 |
+
+sidebar の既定幅は 26 cells とし、既存 pane の kill / resize を自動では行わない。幅を変えたい場合は
+`ensure-ai-sidebars.sh <width>` で新規作成時の幅だけ指定するか、対象 sidebar に対して手動で
+`tmux resize-pane` を実行する。
+
+状態表示は `working` / `waiting` / `idle` の 3 種類に正規化する。表示時刻は sidebar 起動時刻や
+window 切替時刻ではなく、状態が変化した時刻を示す。状態と遷移時刻は対象 pane の
+`@ai_state` / `@ai_state_since` option に保持し、`@ai_state_version` で古い形式の値を無効化する。
+sidebar 起動時点で過去の遷移時刻を復元できない pane は `--:--` と表示する。
+sidebar 起動後に新規出現した pane は検出時刻を初期時刻として使い、以後の状態変化で現在時刻を入れる。
+表示順は `working` → `waiting` → `idle` を第一キーにし、同じ状態内では LLM console
+(`pane_current_command` が codex / claude 系) を通常 shell pane より先に出す。LLM console は
+neutral navy の背景色、通常 shell pane は gray foreground で区別する。
+
+クリック target は window index / pane index ではなく `%pane_id` を正とする。pane index は
+sidebar の追加・削除で変化しやすいため、表示行と移動先の対応には使わない。
+sidebar 側は `@ai_click_target_N` と合わせて表示行テキスト (`@ai_click_line_N`) も保持する。
+クリック解決では表示行テキストの一致を優先し、座標 fallback では `#{mouse_y}` を pane 内
+0 始まりの行番号として扱う。
+tmux の `pane-scrollbars` は copy/view mode で右端に 1 カラムの scrollbar を出し、折り返し位置を
+変えるため無効化する。
+
+通常入力や window 切替で focus が飛ぶのを避けるため、sidebar 作成は `prefix+G` の手動実行に寄せる。
+`pane-focus-in` / `after-select-window` などの hook から sidebar 作成や layout 変更は行わない。
 
 ## 個人情報・マシン依存設定の分離
 
@@ -77,6 +124,7 @@ dotfiles 側では扱わない。詳細は claude.codex の `install.sh` と `do
 
 - **Google Drive 同期で実行権限が落ちる**: `install.sh` / `update.sh` 冒頭で `chmod 755` を再付与している。手動で実行する前にエラーが出たら `bash` 経由で起動するか権限を再付与する
 - **Fisher プラグインの自動生成ファイルが repo に混入**: Fish の `functions/` を丸ごと symlink すると bobthefish 等のテーマファイルが repo に書き込まれる。これを防ぐため個別ファイル単位で symlink している（`links.conf` 参照）
+- **live tmux の sidebar 再作成で focus が動く**: sidebar pane の kill / recreate は通常 pane が active でも active pane を変える場合がある。live 検証では dry-run / 読み取りを優先し、再作成が必要な場合は現在 pane を記録して復元する
 
 ## macOS 固有の設定ファイルパス
 

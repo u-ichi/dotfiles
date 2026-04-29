@@ -23,8 +23,14 @@ detect_name() {
     echo "${name:-?}"
 }
 
-# 各 window の active pane を調べて rename
-while IFS=$'\t' read -r win_id pane_pid; do
+# 各 window の active pane を調べて rename。
+# AI sidebar pane が active の場合は、最初の通常 pane を window 名の判定に使う。
+while IFS= read -r win_id; do
+    pane_pid=$(
+        tmux list-panes -t "$win_id" -F '#{pane_pid}	#{@ai_sidebar}	#{pane_active}' 2>/dev/null \
+            | awk -F '\t' '$2 != "1" && $3 == "1" { print $1; found=1; exit } $2 != "1" && first == "" { first=$1 } END { if (!found && first != "") print first }'
+    )
+    [[ -z "$pane_pid" ]] && continue
     name=$(detect_name "$pane_pid")
     tmux rename-window -t "$win_id" "$name" 2>/dev/null || true
-done < <(tmux list-windows -a -F '#{window_id}	#{pane_pid}' 2>/dev/null)
+done < <(tmux list-windows -a -F '#{window_id}' 2>/dev/null)
