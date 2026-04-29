@@ -1,6 +1,49 @@
 # Codex CLI 起動の内部ヘルパ。function 名の shadowing を避けるため command 経由で呼ぶ。
+function __codex_physical_path
+    set -l path $argv[1]
+    set -l old_pwd "$PWD"
+
+    if builtin cd "$path" 2>/dev/null
+        pwd -P
+        builtin cd "$old_pwd"
+        return 0
+    end
+
+    echo "$path"
+    return 1
+end
+
+function __codex_normalize_cd_args
+    set -l normalized
+    set -l expect_cd_path 0
+
+    for arg in $argv
+        if test $expect_cd_path -eq 1
+            set -a normalized (__codex_physical_path "$arg")
+            set expect_cd_path 0
+            continue
+        end
+
+        set -a normalized "$arg"
+        switch $arg
+            case -C --cd
+                set expect_cd_path 1
+        end
+    end
+
+    printf '%s\n' $normalized
+end
+
 function __codex_run
-    command codex $argv
+    set -l old_pwd "$PWD"
+    set -l physical_pwd (__codex_physical_path "$PWD")
+    set -l normalized_argv (__codex_normalize_cd_args $argv)
+
+    builtin cd "$physical_pwd"
+    command codex $normalized_argv
+    set -l exit_code $status
+    builtin cd "$old_pwd"
+    return $exit_code
 end
 
 function __codex_reset_pane_title
@@ -57,9 +100,15 @@ end
 
 function __codex_run_interactive
     __codex_mark_pane_input_app
-    __codex_set_pane_base_title $argv
-    command codex $argv
+    set -l old_pwd "$PWD"
+    set -l physical_pwd (__codex_physical_path "$PWD")
+    set -l normalized_argv (__codex_normalize_cd_args $argv)
+
+    __codex_set_pane_base_title $normalized_argv
+    builtin cd "$physical_pwd"
+    command codex $normalized_argv
     set -l exit_code $status
+    builtin cd "$old_pwd"
     __codex_reset_pane_title
     return $exit_code
 end
@@ -102,6 +151,7 @@ function __codex_run_in_worktree
     set -l worktree_name $argv[2]
     set -e argv[1]
     set -e argv[1]
+    set repo (__codex_physical_path "$repo")
 
     set -l wt_dir "$repo/.codex/worktrees"
     set -l worktree_path "$wt_dir/$worktree_name"
@@ -164,6 +214,7 @@ function codex --description "Codex CLI を worktree モードで起動（既存
         __codex_run_interactive $argv
         return
     end
+    set repo (__codex_physical_path "$repo")
 
     set -l wt_dir "$repo/.codex/worktrees"
     set -l choices
