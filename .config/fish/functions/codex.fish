@@ -73,6 +73,37 @@ function __codex_mark_pane_input_app
     tmux set-option -p -t "$TMUX_PANE" @ai_input_app codex 2>/dev/null
 end
 
+function __codex_mark_session_probe --argument-names physical_pwd
+    if not set -q TMUX
+        return
+    end
+    if not set -q TMUX_PANE
+        return
+    end
+
+    tmux set-option -p -t "$TMUX_PANE" @ai_codex_started_at (date +%s) 2>/dev/null
+    tmux set-option -p -t "$TMUX_PANE" @ai_codex_cwd "$physical_pwd" 2>/dev/null
+    tmux set-option -p -t "$TMUX_PANE" @ai_codex_session_file "" 2>/dev/null
+end
+
+function __codex_target_path
+    set -l path "$PWD"
+    set -l argc (count $argv)
+    if test $argc -gt 0
+        for i in (seq $argc)
+            switch $argv[$i]
+                case -C --cd
+                    set -l next (math $i + 1)
+                    if test $next -le $argc
+                        set path $argv[$next]
+                    end
+            end
+        end
+    end
+
+    __codex_physical_path "$path"
+end
+
 function __codex_set_pane_base_title
     if not set -q TMUX
         return
@@ -106,6 +137,7 @@ function __codex_run_interactive
 
     __codex_set_pane_base_title $normalized_argv
     builtin cd "$physical_pwd"
+    __codex_mark_session_probe (__codex_target_path $normalized_argv)
     command codex $normalized_argv
     set -l exit_code $status
     builtin cd "$old_pwd"

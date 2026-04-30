@@ -1,3 +1,102 @@
+function __ai_codex_session_start_epoch --argument-names file
+    set -l name (basename "$file")
+    set -l match (string match -r '^rollout-([0-9]{4}-[0-9]{2}-[0-9]{2})T([0-9]{2})-([0-9]{2})-([0-9]{2})-' -- "$name")
+    test (count $match) -ge 5; or return 1
+
+    set -l stamp (printf '%sT%s-%s-%s' "$match[2]" "$match[3]" "$match[4]" "$match[5]")
+    command date -j -f '%Y-%m-%dT%H-%M-%S' "$stamp" +%s 2>/dev/null; or command date -d (printf '%s %s:%s:%s' "$match[2]" "$match[3]" "$match[4]" "$match[5]") +%s 2>/dev/null
+end
+
+function __ai_codex_session_matches_started_at --argument-names file started_at
+    string match -qr '^[0-9]+$' -- "$started_at"; or return 1
+
+    set -l session_started (__ai_codex_session_start_epoch "$file")
+    string match -qr '^[0-9]+$' -- "$session_started"; or return 1
+
+    set -l delta (math "$session_started - $started_at")
+    test "$delta" -ge -5; and test "$delta" -le 600
+end
+
+function __ai_codex_find_session_file --argument-names cwd started_at
+    if not command -q jq
+        return 1
+    end
+    string match -qr '^[0-9]+$' -- "$started_at"; or return 1
+
+    set -l sessions_dir "$HOME/.codex/sessions"
+    test -d "$sessions_dir"; or return 1
+
+    set -l best_file
+    set -l best_delta 999999999
+    for file in (command find "$sessions_dir" -type f -name 'rollout-*.jsonl' -mtime -3 2>/dev/null)
+        set -l session_cwd (command head -n 1 "$file" | command jq -r 'select(.type == "session_meta") | .payload.cwd // empty' 2>/dev/null)
+        test "$session_cwd" = "$cwd"; or continue
+
+        set -l session_started (__ai_codex_session_start_epoch "$file")
+        string match -qr '^[0-9]+$' -- "$session_started"; or continue
+        set -l delta (math "$session_started - $started_at")
+        if test "$delta" -ge -5; and test "$delta" -le 600; and test "$delta" -lt "$best_delta"
+            set best_delta "$delta"
+            set best_file "$file"
+        end
+    end
+
+    test -n "$best_file"; and printf '%s\n' "$best_file"
+end
+
+function __ai_codex_plan_lines --argument-names session_file max_line_chars
+    if not command -q jq
+        return 1
+    end
+    test -f "$session_file"; or return 1
+
+    set -l plan_event
+    if command -q rg
+        set plan_event (command rg '"name":"update_plan"' "$session_file" | command tail -n 1)
+    else
+        set plan_event (command grep '"name":"update_plan"' "$session_file" | command tail -n 1)
+    end
+    test -n "$plan_event"; or return 1
+
+    set -l plan_rows (printf '%s\n' "$plan_event" | command jq -r '
+        (.payload.arguments | fromjson? | .plan // [])
+        | to_entries[]
+        | "\(.key + 1)\t\(.value.status)\t\(.value.step)"
+    ' 2>/dev/null)
+    set -l total (count $plan_rows)
+    test "$total" -gt 0; or return 1
+
+    set -l completed 0
+    for row in $plan_rows
+        set -l parts (string split -m 2 \t -- "$row")
+        test "$parts[2]" = completed; and set completed (math "$completed + 1")
+    end
+
+    printf '%s\n' (string shorten -m $max_line_chars -- (printf 'Plan %s/%s' "$completed" "$total"))
+
+    set -l shown 0
+    for row in $plan_rows
+        set -l parts (string split -m 2 \t -- "$row")
+        set -l item_status $parts[2]
+        set -l step $parts[3]
+        set -l marker -
+        switch "$item_status"
+            case completed
+                set marker '✓'
+            case in_progress
+                set marker '>'
+        end
+
+        set shown (math "$shown + 1")
+        if test "$shown" -le 6
+            printf '%s\n' (string shorten -m $max_line_chars -- (printf '  %s %s' "$marker" "$step"))
+        end
+    end
+    if test "$total" -gt 6
+        printf '%s\n' (string shorten -m $max_line_chars -- '  ...')
+    end
+end
+
 function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
     if not set -q TMUX
         echo "ai-panes-sidebar: not inside tmux" >&2
@@ -14,15 +113,21 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
         set -l line_targets
         set -l line_texts
         set -l current_panes
+        set -l active_codex_pane
+        set -l active_codex_display
+        set -l active_codex_path
+        set -l active_codex_started_at
+        set -l active_codex_session_file
         set -l now_hm (date +%H:%M)
-        set -l raw (tmux list-panes -s -F '#{window_index}.#{pane_index}	#{pane_title}	#{@fixed_title}	#{@ai_sidebar}	#{pane_current_path}	#{window_index}	#{@ai_display_index}	#{pane_current_command}	#{pane_id}	#{@ai_state}	#{@ai_state_since}	#{@ai_state_version}' 2>/dev/null)
+        set -l sidebar_window_id (tmux display-message -p -t "$TMUX_PANE" '#{window_id}' 2>/dev/null)
+        set -l raw (tmux list-panes -s -F '#{window_index}.#{pane_index}	#{pane_title}	#{@fixed_title}	#{@ai_sidebar}	#{pane_current_path}	#{window_index}	#{@ai_display_index}	#{pane_current_command}	#{pane_id}	#{@ai_state}	#{@ai_state_since}	#{@ai_state_version}	#{pane_active}	#{window_id}	#{@ai_codex_started_at}	#{@ai_codex_session_file}	#{@ai_codex_cwd}' 2>/dev/null)
         set -l writer_pane (tmux list-panes -s -F '#{pane_id}	#{@ai_sidebar}' 2>/dev/null | awk -F '\t' '$2 == "1" {print $1; exit}')
         set -l is_writer 0
         test "$TMUX_PANE" = "$writer_pane"; and set is_writer 1
 
         set -l entries
         for line in $raw
-            set -l parts (string split -m 11 \t -- $line)
+            set -l parts (string split -m 16 \t -- $line)
             set -l loc $parts[1]
             set -l title $parts[2]
             set -l fixed_title $parts[3]
@@ -33,6 +138,11 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             set -l cached_state $parts[10]
             set -l state_since $parts[11]
             set -l cached_version $parts[12]
+            set -l pane_active $parts[13]
+            set -l window_id $parts[14]
+            set -l codex_started_at $parts[15]
+            set -l codex_session_file $parts[16]
+            set -l codex_cwd $parts[17]
 
             test "$loc" = (tmux display-message -p -t "$TMUX_PANE" '#{window_index}.#{pane_index}' 2>/dev/null); and continue
             test "$is_sidebar" = 1; and continue
@@ -53,6 +163,9 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             else
                 set display $title
             end
+
+            set -l codex_session_path "$path"
+            test -n "$codex_cwd"; and set codex_session_path "$codex_cwd"
 
             set -l codex_user_waiting 0
             set -l codex_working 0
@@ -146,6 +259,16 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             else
                 set -a entries (printf 'idle\t%s\t%s\t%s\tgray\t%s\t%s' "$kind_sort_key" "$state_sort_key" "$console_kind" (printf '%s ■ %s' "$state_since" "$display") "$pane_id")
             end
+
+            if test "$window_id" = "$sidebar_window_id"; and test "$is_codex_console" = 1
+                if test "$pane_active" = 1
+                    set active_codex_pane "$pane_id"
+                    set active_codex_display "$display"
+                    set active_codex_path "$codex_session_path"
+                    set active_codex_started_at "$codex_started_at"
+                    set active_codex_session_file "$codex_session_file"
+                end
+            end
         end
 
         # 全角文字を含むタイトルでも sidebar 内で折り返さないよう pane 幅に合わせて切る。
@@ -181,6 +304,37 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
                 end
                 set -a line_texts " "$short_row
                 set -a line_targets "$row_target"
+            end
+        end
+
+        if test -n "$active_codex_pane"
+            set -l plan_session_file
+            if string match -qr '^[0-9]+$' -- "$active_codex_started_at"
+                set plan_session_file "$active_codex_session_file"
+                if test -n "$plan_session_file"; and not __ai_codex_session_matches_started_at "$plan_session_file" "$active_codex_started_at"
+                    set plan_session_file ""
+                    test "$is_writer" = 1; and tmux set-option -p -t "$active_codex_pane" @ai_codex_session_file "" 2>/dev/null
+                end
+                if test -z "$plan_session_file"; or not test -f "$plan_session_file"
+                    set plan_session_file (__ai_codex_find_session_file "$active_codex_path" "$active_codex_started_at")
+                    if test -n "$plan_session_file"; and test "$is_writer" = 1
+                        tmux set-option -p -t "$active_codex_pane" @ai_codex_session_file "$plan_session_file" 2>/dev/null
+                    end
+                end
+            else
+                test "$is_writer" = 1; and tmux set-option -p -t "$active_codex_pane" @ai_codex_session_file "" 2>/dev/null
+            end
+
+            set -l plan_lines
+            if test -n "$plan_session_file"
+                set plan_lines (__ai_codex_plan_lines "$plan_session_file" "$max_line_chars")
+            end
+            if test (count $plan_lines) -gt 0
+                set -a lines ""
+                set -a lines (string shorten -m $max_line_chars -- "$active_codex_display")
+                for plan_line in $plan_lines
+                    set -a lines " "$plan_line
+                end
             end
         end
 

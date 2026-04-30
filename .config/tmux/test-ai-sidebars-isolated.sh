@@ -22,6 +22,11 @@ sidebar_count() {
     | awk '$1 == "1" { count++ } END { print count + 0 }'
 }
 
+sidebar_version() {
+  tmux_i list-panes -t "$1" -F '#{@ai_sidebar}	#{@ai_sidebar_version}' \
+    | awk -F '\t' '$1 == "1" { print $2; exit }'
+}
+
 wait_for_sidebar() {
   local target="$1"
   local count
@@ -83,6 +88,10 @@ fi
 
 TMUX="$SOCKET,0,0" "$SCRIPT_DIR/ensure-ai-sidebars.sh"
 wait_for_sidebar 'ai-sidebar-test:1'
+if [ "$(sidebar_version 'ai-sidebar-test:1')" != "8" ]; then
+  echo "ERROR: sidebar version was not recorded" >&2
+  exit 1
+fi
 
 tmux_i new-window -d -n second 'sleep 60'
 wait_for_sidebar 'ai-sidebar-test:2'
