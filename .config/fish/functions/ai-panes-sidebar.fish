@@ -97,6 +97,18 @@ function __ai_codex_plan_lines --argument-names session_file max_line_chars
     end
 end
 
+function __ai_sidebar_max_line_chars --argument-names pane_width
+    if not string match -qr '^[0-9]+$' -- "$pane_width"
+        set pane_width 26
+    end
+
+    set -l max_line_chars (math "$pane_width - 1")
+    if test "$max_line_chars" -lt 1
+        set max_line_chars 1
+    end
+    printf '%s\n' "$max_line_chars"
+end
+
 function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
     if not set -q TMUX
         echo "ai-panes-sidebar: not inside tmux" >&2
@@ -273,10 +285,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
 
         # 全角文字を含むタイトルでも sidebar 内で折り返さないよう pane 幅に合わせて切る。
         set -l pane_width (tmux display-message -p -t "$TMUX_PANE" '#{pane_width}' 2>/dev/null)
-        if not string match -qr '^[0-9]+$' -- "$pane_width"
-            set pane_width 26
-        end
-        set -l max_line_chars (math "max(20, $pane_width - 1)")
+        set -l max_line_chars (__ai_sidebar_max_line_chars "$pane_width")
         set -l llm_bg_color 2a2a44
         for bucket in working waiting idle
             for item in (printf '%s\n' $entries | sort -r)

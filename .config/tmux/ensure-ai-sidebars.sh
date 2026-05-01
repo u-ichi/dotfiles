@@ -4,7 +4,7 @@ set -u
 
 width="${1:-26}"
 min_width=$((width + 40))
-sidebar_version="8"
+sidebar_version="9"
 sidebar_command='sleep 0.2; exec fish -c ai-panes-sidebar'
 
 [ -z "${TMUX:-}" ] && exit 0
@@ -29,6 +29,11 @@ while IFS=$'\t' read -r win_id win_width; do
     tmux set-option -p -t "$sidebar_pane" @fixed_title "" 2>/dev/null || true
     tmux set-option -p -t "$sidebar_pane" @ai_sidebar_version "$sidebar_version" 2>/dev/null || true
   else
+    current_width="$(tmux display-message -p -t "$sidebar_pane" '#{pane_width}' 2>/dev/null || true)"
+    if printf '%s\n' "$current_width" | grep -Eq '^[0-9]+$' && [ "$current_width" -ne "$width" ]; then
+      tmux resize-pane -t "$sidebar_pane" -x "$width" 2>/dev/null || true
+    fi
+
     current_version="$(tmux show-option -pqv -t "$sidebar_pane" @ai_sidebar_version 2>/dev/null || true)"
     if [ "$current_version" != "$sidebar_version" ]; then
       tmux respawn-pane -k -t "$sidebar_pane" "$sidebar_command" 2>/dev/null || true

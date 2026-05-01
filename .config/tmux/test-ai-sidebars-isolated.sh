@@ -88,8 +88,22 @@ fi
 
 TMUX="$SOCKET,0,0" "$SCRIPT_DIR/ensure-ai-sidebars.sh"
 wait_for_sidebar 'ai-sidebar-test:1'
-if [ "$(sidebar_version 'ai-sidebar-test:1')" != "8" ]; then
+if [ "$(sidebar_version 'ai-sidebar-test:1')" != "9" ]; then
   echo "ERROR: sidebar version was not recorded" >&2
+  exit 1
+fi
+
+if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; test (__ai_sidebar_max_line_chars 4) -eq 3; and test (__ai_sidebar_max_line_chars 1) -eq 1; and test (__ai_sidebar_max_line_chars invalid) -eq 25"; then
+  echo "ERROR: sidebar line width calculation is invalid" >&2
+  exit 1
+fi
+
+sidebar_pane="$(tmux_i list-panes -t 'ai-sidebar-test:1' -F '#{pane_id}	#{@ai_sidebar}' | awk -F '\t' '$2 == "1" { print $1; exit }')"
+tmux_i resize-pane -t "$sidebar_pane" -x 4
+TMUX="$SOCKET,0,0" "$SCRIPT_DIR/ensure-ai-sidebars.sh"
+sidebar_width="$(tmux_i display-message -p -t "$sidebar_pane" '#{pane_width}')"
+if [ "$sidebar_width" -ne 26 ]; then
+  echo "ERROR: existing sidebar width was not restored: $sidebar_width" >&2
   exit 1
 fi
 
