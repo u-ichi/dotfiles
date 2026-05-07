@@ -6,6 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TMP_BASE="${TMPDIR:-/tmp}"
 SOCKET_DIR="$(mktemp -d "$TMP_BASE/tmux-ai-sidebar-test.XXXXXX")"
 SOCKET="$SOCKET_DIR/socket"
+TEST_HOME="$SOCKET_DIR/home"
 
 cleanup() {
   command tmux -S "$SOCKET" kill-server >/dev/null 2>&1 || true
@@ -27,6 +28,12 @@ sidebar_version() {
     | awk -F '\t' '$1 == "1" { print $2; exit }'
 }
 
+window_exists() {
+  local target="$1"
+
+  tmux_i list-windows -F '#{window_id}' | grep -Fxq "$target"
+}
+
 wait_for_sidebar() {
   local target="$1"
   local count
@@ -44,6 +51,21 @@ wait_for_sidebar() {
   return 1
 }
 
+wait_for_window_absent() {
+  local target="$1"
+
+  for _ in {1..30}; do
+    if ! window_exists "$target"; then
+      return 0
+    fi
+    sleep 0.1
+  done
+
+  echo "ERROR: $target still exists after orphan sidebar cleanup" >&2
+  tmux_i list-panes -t "$target" -F '#{pane_id} sidebar=#{@ai_sidebar} active=#{pane_active} title=#{pane_title}' >&2 || true
+  return 1
+}
+
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
     echo "SKIP: $1 is not installed" >&2
@@ -53,6 +75,11 @@ require_command() {
 
 require_command tmux
 require_command fish
+
+mkdir -p "$TEST_HOME/.config/fish/functions"
+ln -s "$SCRIPT_DIR" "$TEST_HOME/.config/tmux"
+ln -s "$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish" "$TEST_HOME/.config/fish/functions/ai-panes-sidebar.fish"
+export HOME="$TEST_HOME"
 
 tmux_i new-session -d -s ai-sidebar-test -n first -x 120 -y 30 'sleep 60'
 tmux_i source-file "$SCRIPT_DIR/tmux.conf"
@@ -86,15 +113,27 @@ if ! printf '%s\n' "$new_window_hook" | grep -q 'ensure-ai-sidebars.sh'; then
   exit 1
 fi
 
+kill_pane_hook="$(tmux_i show-hooks -g after-kill-pane)"
+if ! printf '%s\n' "$kill_pane_hook" | grep -q 'cleanup-ai-sidebars.sh'; then
+  echo "ERROR: after-kill-pane hook does not clean up orphan sidebars" >&2
+  printf '%s\n' "$kill_pane_hook" >&2
+  exit 1
+fi
+
 TMUX="$SOCKET,0,0" "$SCRIPT_DIR/ensure-ai-sidebars.sh"
 wait_for_sidebar 'ai-sidebar-test:1'
-if [ "$(sidebar_version 'ai-sidebar-test:1')" != "9" ]; then
+if [ "$(sidebar_version 'ai-sidebar-test:1')" != "10" ]; then
   echo "ERROR: sidebar version was not recorded" >&2
   exit 1
 fi
 
 if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; test (__ai_sidebar_max_line_chars 4) -eq 3; and test (__ai_sidebar_max_line_chars 1) -eq 1; and test (__ai_sidebar_max_line_chars invalid) -eq 25"; then
   echo "ERROR: sidebar line width calculation is invalid" >&2
+  exit 1
+fi
+
+if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; test (printf '%s\n' 'Conversation interrupted - tell the model what to do differently' '• Working (10s • esc to interrupt)' | __ai_codex_visible_state) = working; and test (printf '%s\n' '• Working (10s • esc to interrupt)' '• Worked for 1m 42s' '› 対処して' | __ai_codex_visible_state) = idle; and test (printf '%s\n' 'Would you like to run the following command?' 'Yes, proceed (y)' | __ai_codex_visible_state) = waiting"; then
+  echo "ERROR: Codex visible state detection is invalid" >&2
   exit 1
 fi
 
@@ -109,5 +148,9 @@ fi
 
 tmux_i new-window -d -n second 'sleep 60'
 wait_for_sidebar 'ai-sidebar-test:2'
+second_window_id="$(tmux_i display-message -p -t 'ai-sidebar-test:2' '#{window_id}')"
+second_normal_pane="$(tmux_i list-panes -t 'ai-sidebar-test:2' -F '#{pane_id}	#{@ai_sidebar}' | awk -F '\t' '$2 != "1" { print $1; exit }')"
+tmux_i kill-pane -t "$second_normal_pane"
+wait_for_window_absent "$second_window_id"
 
 echo "tmux AI sidebar isolated test passed"

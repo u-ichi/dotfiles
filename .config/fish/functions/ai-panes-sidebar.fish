@@ -109,6 +109,46 @@ function __ai_sidebar_max_line_chars --argument-names pane_width
     printf '%s\n' "$max_line_chars"
 end
 
+function __ai_codex_signal_line_state --argument-names line
+    if string match -qr '^\s*(diff --git|index |--- |\+\+\+ |@@|[+-])' -- "$line"
+        return 1
+    end
+
+    if string match -q '*Working (*' -- "$line"
+        printf '%s\n' working
+    else if string match -q '*Waiting for background terminal*' -- "$line"
+        printf '%s\n' working
+    else if string match -q '*background terminal running*' -- "$line"
+        printf '%s\n' working
+    else if string match -q '*Press enter to confirm or esc to cancel*' -- "$line"
+        printf '%s\n' waiting
+    else if string match -q '*Would you like to run the following command?*' -- "$line"
+        printf '%s\n' waiting
+    else if string match -qr '(Yes, proceed \(y\)|No, and tell Codex what to do differently)' -- "$line"
+        printf '%s\n' waiting
+    else if string match -q '*Conversation interrupted - tell the model what to do differently*' -- "$line"
+        printf '%s\n' waiting
+    else if string match -q '*To continue this session, run codex resume*' -- "$line"
+        printf '%s\n' waiting
+    else if string match -qr '(承認してください|承認をお願いします|実行してよいですか|OK.*返してください|どう進めますか|どうしますか|どちらにしますか|ご指示ください)' -- "$line"
+        printf '%s\n' waiting
+    else if string match -qr '^\s*[•●] Worked for ' -- "$line"
+        printf '%s\n' idle
+    else if string match -qr '^\s*›' -- "$line"
+        printf '%s\n' idle
+    end
+end
+
+function __ai_codex_visible_state
+    set -l detected_state
+    while read -l line
+        set -l line_state (__ai_codex_signal_line_state "$line")
+        test -n "$line_state"; and set detected_state "$line_state"
+    end
+
+    test -n "$detected_state"; and printf '%s\n' "$detected_state"
+end
+
 function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
     if not set -q TMUX
         echo "ai-panes-sidebar: not inside tmux" >&2
@@ -183,27 +223,10 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             set -l codex_working 0
             if test "$is_codex_console" = 1
                 set -l visible (tmux capture-pane -p -J -t "$pane_id" 2>/dev/null | tail -24)
-                set -l signal_lines
-                for line in $visible
-                    if not string match -qr '^\s*(diff --git|index |--- |\+\+\+ |@@|[+-])' -- $line
-                        set -a signal_lines $line
-                    end
-                end
-                if string match -q '*Press enter to confirm or esc to cancel*' -- $signal_lines
+                set -l codex_visible_state (printf '%s\n' $visible | __ai_codex_visible_state)
+                if test "$codex_visible_state" = waiting
                     set codex_user_waiting 1
-                else if string match -q '*Would you like to run the following command?*' -- $signal_lines; and string match -qr '(Yes, proceed \(y\)|No, and tell Codex what to do differently)' -- $signal_lines
-                    set codex_user_waiting 1
-                else if string match -q '*Conversation interrupted - tell the model what to do differently*' -- $signal_lines
-                    set codex_user_waiting 1
-                else if string match -q '*To continue this session, run codex resume*' -- $signal_lines
-                    set codex_user_waiting 1
-                else if string match -qr '(承認してください|承認をお願いします|実行してよいですか|OK.*返してください|どう進めますか|どうしますか|どちらにしますか|ご指示ください)' -- $signal_lines
-                    set codex_user_waiting 1
-                else if string match -q '*Working (*' -- $signal_lines
-                    set codex_working 1
-                else if string match -q '*Waiting for background terminal*' -- $signal_lines
-                    set codex_working 1
-                else if string match -q '*background terminal running*' -- $signal_lines
+                else if test "$codex_visible_state" = working
                     set codex_working 1
                 end
             end

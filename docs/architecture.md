@@ -30,6 +30,7 @@
 │   ├── tmux/rename-windows.sh  # tmux window 名の自動更新
 │   ├── tmux/ensure-ai-sidebars.sh # tmux AI sidebar の作成
 │   ├── tmux/update-ai-display-indexes.sh # tmux AI sidebar 用表示番号の再採番
+│   ├── tmux/cleanup-ai-sidebars.sh # orphan 化した tmux AI sidebar の削除
 │   ├── tmux/ai-sidebar-click.sh   # tmux AI sidebar のクリック解決
 │   ├── tmux/test-ai-sidebars-isolated.sh # 専用 socket 上の tmux AI sidebar 検証
 │   ├── ghostty/config          # Ghostty ターミナル設定
@@ -67,6 +68,7 @@ dotfiles 側では扱わない。詳細は claude.codex の `install.sh` と `do
 | `.config/tmux/rename-windows.sh` | tmux window 名を active な通常 pane のプロセス名から更新する。AI sidebar pane が active の場合は最初の通常 pane を基準にする |
 | `.config/tmux/ensure-ai-sidebars.sh` | 各 tmux window に AI pane 一覧 sidebar が無ければ作成する。既存 sidebar の kill / resize は行わない |
 | `.config/tmux/update-ai-display-indexes.sh` | tmux pane の増減後に AI sidebar 用の表示番号 (`@ai_display_index`) だけを再採番する。sidebar の作成や layout 変更は行わない |
+| `.config/tmux/cleanup-ai-sidebars.sh` | 通常 pane が残っていない window の orphan sidebar を閉じる |
 | `.config/tmux/ai-sidebar-click.sh` | AI sidebar のクリック行から対象 pane を解決して移動する。`AI_SIDEBAR_CLICK_DRY_RUN=1` では対象 pane の出力だけ行う |
 | `.config/tmux/test-ai-sidebars-isolated.sh` | 専用 socket の disposable tmux server だけを使い、sidebar 既定有効化と新規 window hook を検証する |
 
@@ -87,6 +89,7 @@ sidebar は責務を 3 つに分ける。
 |----------|------|
 | `.config/tmux/ensure-ai-sidebars.sh` | sidebar pane の作成 |
 | `.config/tmux/update-ai-display-indexes.sh` | 通常 pane の表示番号 (`@ai_display_index`) 付与と再採番 |
+| `.config/tmux/cleanup-ai-sidebars.sh` | orphan sidebar の削除 |
 | `.config/fish/functions/ai-panes-sidebar.fish` | pane 一覧の表示、状態検出、状態遷移時刻、表示行ごとの click target (`@ai_click_target_N`) 更新 |
 | `.config/tmux/ai-sidebar-click.sh` | クリックされた表示行を `%pane_id` に解決し、対象 window / pane へ移動 |
 
@@ -109,8 +112,10 @@ sidebar 起動後に新規出現した pane は検出時刻を初期時刻とし
 Codex 起動直後の `project | Context ... used` title は status line 由来なので、pane border では
 `@ai_base_title` に保存した短い起動ディレクトリ名を表示する。タスク名 title になった後は
 `#{pane_title}` をそのまま表示する。
-`@ai_display_index` は `after-split-window` / `after-kill-pane` hook で再採番する。hook からは
-`update-ai-display-indexes.sh` だけを呼び、sidebar 作成や layout 変更は行わない。
+`@ai_display_index` は `after-split-window` / `after-kill-pane` hook で再採番する。通常 pane が
+全て閉じられて sidebar だけが残った window は `after-kill-pane` hook で
+`cleanup-ai-sidebars.sh` が sidebar を閉じる。sidebar 作成は hook からは行わず、layout 変更は
+orphan cleanup に限定する。
 表示順は `working` → `waiting` → `idle` を第一キーにする。`working` / `waiting` では状態遷移時刻の
 新しいものを上、古いものを下に出す。`idle` では LLM console (`pane_current_command` /
 Codex の `Context ... used` title が codex / claude 系) を通常 shell pane
