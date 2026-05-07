@@ -143,6 +143,9 @@ function __ai_codex_visible_state
     set -l detected_state
     while read -l line
         set -l line_state (__ai_codex_signal_line_state "$line")
+        if test "$line_state" = idle; and string match -qr '^\s*›' -- "$line"; and test -n "$detected_state"
+            continue
+        end
         test -n "$line_state"; and set detected_state "$line_state"
     end
 
@@ -266,7 +269,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
                 set display_state $detected_state
                 set state_since "$now_hm"
             end
-            if test "$is_writer" = 1; and test -n "$cached_state"; and test "$detected_state" != "$cached_state"
+            if test -n "$cached_state"; and test "$detected_state" != "$cached_state"
                 set display_state $detected_state
                 set state_since "$now_hm"
             end
