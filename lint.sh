@@ -39,7 +39,7 @@ echo ""
 # === Fish smoke tests ===
 echo "=== Fish smoke tests ==="
 if command -v fish &>/dev/null; then
-  fish -c "source '$SCRIPT_DIR/.config/fish/functions/codex.fish'; __codex_set_pane_base_title" || errors=$((errors + 1))
+  fish -c "source '$SCRIPT_DIR/.config/fish/functions/__ai_pane_title_sync.fish'; source '$SCRIPT_DIR/.config/fish/functions/codex.fish'; __codex_set_pane_base_title" || errors=$((errors + 1))
 else
   echo "  スキップ: fish がインストールされていません"
 fi

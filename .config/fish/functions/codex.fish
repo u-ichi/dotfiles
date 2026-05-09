@@ -1,4 +1,22 @@
 # Codex CLI 起動の内部ヘルパ。function 名の shadowing を避けるため command 経由で呼ぶ。
+function __codex_ai_pane_title_sync_path
+    set -l function_file (status filename)
+    set -l helper_path (dirname "$function_file")/__ai_pane_title_sync.fish
+    if not test -f "$helper_path"
+        set -l linked_file (command readlink "$function_file" 2>/dev/null)
+        test -n "$linked_file"; and set helper_path (dirname "$linked_file")/__ai_pane_title_sync.fish
+    end
+
+    test -f "$helper_path"; and printf '%s\n' "$helper_path"
+end
+
+function __codex_ensure_ai_pane_title_sync
+    functions -q __ai_pane_title_sync; and return 0
+
+    set -l helper_path (__codex_ai_pane_title_sync_path)
+    test -n "$helper_path"; and source "$helper_path"
+end
+
 function __codex_physical_path
     set -l path $argv[1]
     set -l old_pwd "$PWD"
@@ -54,12 +72,11 @@ function __codex_reset_pane_title
         return
     end
 
-    # Claude Code の SessionEnd hook と同じ方針で、終了後は作業ラベルを捨てる。
+    # 自動タイトルだけを捨てる。@fixed_title はユーザー指定なので残す。
     set -l title (basename "$PWD")
     tmux select-pane -t "$TMUX_PANE" -T "$title" 2>/dev/null
-    tmux set-option -p -t "$TMUX_PANE" @fixed_title "" 2>/dev/null
-    tmux set-option -p -t "$TMUX_PANE" @ai_base_title "" 2>/dev/null
-    tmux set-option -p -t "$TMUX_PANE" @ai_input_app "" 2>/dev/null
+    __codex_ensure_ai_pane_title_sync
+    __ai_pane_title_sync clear "$TMUX_PANE"
 end
 
 function __codex_mark_pane_input_app
@@ -70,10 +87,11 @@ function __codex_mark_pane_input_app
         return
     end
 
-    tmux set-option -p -t "$TMUX_PANE" @ai_input_app codex 2>/dev/null
+    __codex_ensure_ai_pane_title_sync
+    __ai_pane_title_sync mark-app "$TMUX_PANE" codex
 end
 
-function __codex_mark_session_probe --argument-names physical_pwd
+function __codex_mark_session_probe --argument-names physical_pwd started_at
     if not set -q TMUX
         return
     end
@@ -81,9 +99,8 @@ function __codex_mark_session_probe --argument-names physical_pwd
         return
     end
 
-    tmux set-option -p -t "$TMUX_PANE" @ai_codex_started_at (date +%s) 2>/dev/null
-    tmux set-option -p -t "$TMUX_PANE" @ai_codex_cwd "$physical_pwd" 2>/dev/null
-    tmux set-option -p -t "$TMUX_PANE" @ai_codex_session_file "" 2>/dev/null
+    __codex_ensure_ai_pane_title_sync
+    __ai_pane_title_sync mark-codex "$TMUX_PANE" "$started_at" "$physical_pwd"
 end
 
 function __codex_target_path
@@ -112,21 +129,9 @@ function __codex_set_pane_base_title
         return
     end
 
-    set -l path "$PWD"
-    set -l argc (count $argv)
-    if test $argc -gt 0
-        for i in (seq $argc)
-            switch $argv[$i]
-                case -C --cd
-                    set -l next (math $i + 1)
-                    if test $next -le $argc
-                        set path $argv[$next]
-                    end
-            end
-        end
-    end
-
-    tmux set-option -p -t "$TMUX_PANE" @ai_base_title (basename "$path") 2>/dev/null
+    __codex_ensure_ai_pane_title_sync
+    set -l path (__codex_target_path $argv)
+    __ai_pane_title_sync set-base "$TMUX_PANE" (basename "$path") codex-fallback
 end
 
 function __codex_run_interactive
@@ -134,12 +139,25 @@ function __codex_run_interactive
     set -l old_pwd "$PWD"
     set -l physical_pwd (__codex_physical_path "$PWD")
     set -l normalized_argv (__codex_normalize_cd_args $argv)
+    set -l target_path (__codex_target_path $normalized_argv)
+    set -l started_at (date +%s)
+    set -l watcher_pid
 
     __codex_set_pane_base_title $normalized_argv
     builtin cd "$physical_pwd"
-    __codex_mark_session_probe (__codex_target_path $normalized_argv)
+    __codex_mark_session_probe "$target_path" "$started_at"
+    if set -q TMUX; and set -q TMUX_PANE
+        set -l helper_path (__codex_ai_pane_title_sync_path)
+        if test -n "$helper_path"
+            command fish -c 'source "$argv[1]"; sleep 0.5; __ai_pane_title_sync codex-watch "$argv[2]" "$argv[3]" "$argv[4]"' "$helper_path" "$TMUX_PANE" "$target_path" "$started_at" >/dev/null 2>&1 &
+            set watcher_pid $last_pid
+        end
+    end
     command codex $normalized_argv
     set -l exit_code $status
+    if test -n "$watcher_pid"
+        kill $watcher_pid 2>/dev/null
+    end
     builtin cd "$old_pwd"
     __codex_reset_pane_title
     return $exit_code
@@ -228,16 +246,23 @@ function codex --description "Codex CLI を worktree モードで起動（既存
         return
     end
 
-    # subcommand や明示的な working root 指定は Codex 本体へそのまま渡す。
+    # 非対話 subcommand は Codex 本体へそのまま渡す。resume/fork/-C は TUI なので title sync を通す。
     for arg in $argv
         switch $arg
-            case exec e review login logout mcp plugin mcp-server app-server app completion sandbox debug apply a resume fork cloud exec-server features help
+            case exec e review login logout mcp plugin mcp-server app-server app completion sandbox debug apply a cloud exec-server features help
                 __codex_run $argv
                 return
-            case --cd -C --help -h --version -V
+            case resume fork
+                __codex_run_interactive $argv
+                return
+            case --help -h --version -V
                 __codex_run $argv
                 return
         end
+    end
+    if contains -- -C $argv; or contains -- --cd $argv
+        __codex_run_interactive $argv
+        return
     end
 
     set -l repo (git rev-parse --show-toplevel 2>/dev/null)
@@ -257,6 +282,11 @@ function codex --description "Codex CLI を worktree モードで起動（既存
                 set -a choices (basename $d)
             end
         end
+    end
+
+    if test (count $choices) -eq 0; and test (count $argv) -eq 0
+        __codex_run_interactive
+        return
     end
 
     if test (count $choices) -gt 0

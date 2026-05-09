@@ -1,9 +1,83 @@
+function __claude_ai_pane_title_sync_path
+    set -l function_file (status filename)
+    set -l helper_path (dirname "$function_file")/__ai_pane_title_sync.fish
+    if not test -f "$helper_path"
+        set -l linked_file (command readlink "$function_file" 2>/dev/null)
+        test -n "$linked_file"; and set helper_path (dirname "$linked_file")/__ai_pane_title_sync.fish
+    end
+
+    test -f "$helper_path"; and printf '%s\n' "$helper_path"
+end
+
+function __claude_ensure_ai_pane_title_sync
+    functions -q __ai_pane_title_sync; and return 0
+
+    set -l helper_path (__claude_ai_pane_title_sync_path)
+    test -n "$helper_path"; and source "$helper_path"
+end
+
+function __claude_physical_path
+    set -l path $argv[1]
+    set -l old_pwd "$PWD"
+
+    if builtin cd "$path" 2>/dev/null
+        pwd -P
+        builtin cd "$old_pwd"
+        return 0
+    end
+
+    echo "$path"
+    return 1
+end
+
+function __claude_fallback_title
+    set -l title (basename "$PWD")
+    set -l argc (count $argv)
+    if test $argc -gt 0
+        for i in (seq $argc)
+            switch $argv[$i]
+                case --worktree -w
+                    set -l next (math $i + 1)
+                    if test $next -le $argc
+                        set title $argv[$next]
+                    end
+            end
+        end
+    end
+
+    printf '%s\n' "$title"
+end
+
 # Claude Code 起動の内部ヘルパ。worktree モードのフラグ分岐から共通で呼ぶ。
-# 終了時の pane title リセットは claude-code-base-repository 側の
-# SessionEnd hook (session-end-reset-pane-title.sh) が担当するため、
-# ここでは exit 後の OSC 2 リセットは行わない (二重実装解消)。
+# pane_title の OSC 2 リセットは claude-code-base-repository 側の
+# SessionEnd hook (session-end-reset-pane-title.sh) が担当する。
 function __claude_run
+    set -l watcher_pid
+    if set -q TMUX; and set -q TMUX_PANE
+        __claude_ensure_ai_pane_title_sync
+        set -l physical_pwd (__claude_physical_path "$PWD")
+        set -l started_at (date +%s)
+        set -l fallback_title (__claude_fallback_title $argv)
+        __ai_pane_title_sync mark-claude "$TMUX_PANE" "$started_at" "$physical_pwd"
+        __ai_pane_title_sync set-base "$TMUX_PANE" "$fallback_title" claude-fallback
+        set -l helper_path (__claude_ai_pane_title_sync_path)
+        if test -n "$helper_path"
+            command fish -c 'source "$argv[1]"; sleep 0.5; __ai_pane_title_sync claude-watch "$argv[2]" "$argv[3]" "$argv[4]"' "$helper_path" "$TMUX_PANE" "$physical_pwd" "$started_at" >/dev/null 2>&1 &
+            set watcher_pid $last_pid
+        end
+    end
+
     command claude $argv
+    set -l exit_code $status
+
+    if test -n "$watcher_pid"
+        kill $watcher_pid 2>/dev/null
+    end
+    if set -q TMUX; and set -q TMUX_PANE
+        __claude_ensure_ai_pane_title_sync
+        __ai_pane_title_sync clear "$TMUX_PANE"
+    end
+    return $exit_code
 end
 
 function claude --description "Claude Code を worktree モードで起動（既存選択 or 新規作成）"
@@ -32,6 +106,11 @@ function claude --description "Claude Code を worktree モードで起動（既
                 set -a choices (basename $d)
             end
         end
+    end
+
+    if test (count $choices) -eq 0; and test (count $argv) -eq 0
+        __claude_run
+        return
     end
 
     if test (count $choices) -gt 0

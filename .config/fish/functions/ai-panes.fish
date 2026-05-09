@@ -6,11 +6,12 @@ function ai-panes --description 'Jump to an AI CLI pane in the current tmux sess
 
     set -l session (tmux display-message -p '#S')
 
-    # 各 pane を tab 区切り 6 フィールドで取得。pane_title には "|" が入ることがある。
+    # 各 pane を tab 区切り 7 フィールドで取得。pane_title には "|" が入ることがある。
     # pane_title: Claude Code が送る OSC 2 の状態 marker 判定に使う。
     # fixed_title: 手動固定タイトル。設定されていれば表示名として最優先する。
+    # ai_base_title: AI CLI の自動生成セッション名など、手動固定ではない表示名。
     # pane_current_command: window 全体ではなく pane 固有の codex / claude 判定に使う。
-    set -l raw (tmux list-panes -s -F '#{window_index}.#{pane_index}	#{pane_title}	#{@fixed_title}	#{@ai_sidebar}	#{pane_current_path}	#{pane_current_command}')
+    set -l raw (tmux list-panes -s -F '#{window_index}.#{pane_index}	#{pane_title}	#{@fixed_title}	#{@ai_base_title}	#{@ai_sidebar}	#{pane_current_path}	#{pane_current_command}')
 
     # 状態判定して 3 バケツに振り分け:
     #   ✳ 始まり                      = Claude が user 入力待ち (最優先)
@@ -20,13 +21,14 @@ function ai-panes --description 'Jump to an AI CLI pane in the current tmux sess
     set -l working
     set -l idle
     for line in $raw
-        set -l parts (string split -m 5 \t -- $line)
+        set -l parts (string split -m 6 \t -- $line)
         set -l loc $parts[1]
         set -l title $parts[2]
         set -l fixed_title $parts[3]
-        set -l is_sidebar $parts[4]
-        set -l path $parts[5]
-        set -l command_name (string lower -- $parts[6])
+        set -l base_title $parts[4]
+        set -l is_sidebar $parts[5]
+        set -l path $parts[6]
+        set -l command_name (string lower -- $parts[7])
 
         test "$is_sidebar" = 1; and continue
 
@@ -40,6 +42,8 @@ function ai-panes --description 'Jump to an AI CLI pane in the current tmux sess
 
         if test -n "$fixed_title"
             set display $fixed_title
+        else if test -n "$base_title"
+            set display $base_title
         else if test "$is_codex_console" = 1; and test "$title" = (basename "$path")
             set display (string replace "$HOME" "~" -- "$path")
         else
