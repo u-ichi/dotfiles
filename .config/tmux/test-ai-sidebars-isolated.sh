@@ -122,7 +122,7 @@ fi
 
 TMUX="$SOCKET,0,0" "$SCRIPT_DIR/ensure-ai-sidebars.sh"
 wait_for_sidebar 'ai-sidebar-test:1'
-if [ "$(sidebar_version 'ai-sidebar-test:1')" != "16" ]; then
+if [ "$(sidebar_version 'ai-sidebar-test:1')" != "17" ]; then
   echo "ERROR: sidebar version was not recorded" >&2
   exit 1
 fi
