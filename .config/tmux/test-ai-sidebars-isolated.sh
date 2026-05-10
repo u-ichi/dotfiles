@@ -122,7 +122,7 @@ fi
 
 TMUX="$SOCKET,0,0" "$SCRIPT_DIR/ensure-ai-sidebars.sh"
 wait_for_sidebar 'ai-sidebar-test:1'
-if [ "$(sidebar_version 'ai-sidebar-test:1')" != "15" ]; then
+if [ "$(sidebar_version 'ai-sidebar-test:1')" != "16" ]; then
   echo "ERROR: sidebar version was not recorded" >&2
   exit 1
 fi
@@ -132,7 +132,7 @@ if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; test
   exit 1
 fi
 
-if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; test (printf '%s\n' 'Conversation interrupted - tell the model what to do differently' '• Working (10s • esc to interrupt)' | __ai_codex_visible_state) = working; and test (printf '%s\n' '• Working (10s • esc to interrupt)' '› 対処して' | __ai_codex_visible_state) = working; and test (printf '%s\n' '• Working (10s • esc to interrupt)' '• Worked for 1m 42s' '› 対処して' | __ai_codex_visible_state) = idle; and test (printf '%s\n' 'Would you like to run the following command?' 'Yes, proceed (y)' | __ai_codex_visible_state) = waiting"; then
+if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; test (printf '%s\n' 'Conversation interrupted - tell the model what to do differently' '• Working (10s • esc to interrupt)' | __ai_codex_visible_state) = working; and test (printf '%s\n' '• Working (10s • esc to interrupt)' '› 対処して' | __ai_codex_visible_state) = working; and test (printf '%s\n' '• Booting MCP server: codex_apps (5m 12s • esc to interrupt)' | __ai_codex_visible_state) = working; and test (printf '%s\n' '• Working (10s • esc to interrupt)' '• Worked for 1m 42s' '› 対処して' | __ai_codex_visible_state) = idle; and test (printf '%s\n' 'Would you like to run the following command?' 'Yes, proceed (y)' | __ai_codex_visible_state) = waiting"; then
   echo "ERROR: Codex visible state detection is invalid" >&2
   exit 1
 fi
@@ -149,6 +149,13 @@ if command -v jq >/dev/null 2>&1; then
   if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; set lines (__ai_codex_plan_lines '$plan_file' 80); test \"\$lines[2]\" = '3/3 plan 表示を直す'"; then
     echo "ERROR: Codex completed plan line is invalid" >&2
     fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; __ai_codex_plan_lines '$plan_file' 80" >&2 || true
+    exit 1
+  fi
+  no_prefix_plan_file="$SOCKET_DIR/codex-plan-no-prefix.jsonl"
+  printf '%s\n' '{"name":"update_plan","payload":{"arguments":"{\"explanation\":\"Goal: task 重複を防ぐ\",\"plan\":[{\"step\":\"MCP 状態誤判定修正を commit する\",\"status\":\"in_progress\"},{\"step\":\"commit skill と差分を確認する\",\"status\":\"completed\"},{\"step\":\"対象ファイルを stage する\",\"status\":\"pending\"}]}"}}' > "$no_prefix_plan_file"
+  if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; set lines (__ai_codex_plan_lines '$no_prefix_plan_file' 80); test \"\$lines[2]\" = '1/2 MCP 状態誤判定修正を commit する'; and test \"\$lines[3]\" = '  ✓ commit skill と差分を確認する'; and test \"\$lines[4]\" = '  - 対象ファイルを stage する'"; then
+    echo "ERROR: Codex unprefixed task lines are duplicated or invalid" >&2
+    fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; __ai_codex_plan_lines '$no_prefix_plan_file' 80" >&2 || true
     exit 1
   fi
 fi

@@ -86,7 +86,7 @@ function __ai_codex_plan_lines --argument-names session_file max_line_chars
                 .groups += [{
                     title: ($step | strip_prefix),
                     status: ($item.status // "pending"),
-                    rows: [$item]
+                    rows: []
                 }]
               else
                 .groups[-1].rows += [$item]
@@ -98,9 +98,13 @@ function __ai_codex_plan_lines --argument-names session_file max_line_chars
             // ($groups | map(select((.status != "completed") or any(.rows[]?; .status != "completed"))) | .[0])
             // $groups[-1]
           ) as $group
-        | ($group.rows | if length > 0 then . else [{step: $group.title, status: $group.status}] end) as $rows
-        | ($rows | map(select(.status == "completed")) | length) as $completed
-        | ($rows | length) as $total
+        | $group.rows as $rows
+        | (if ($rows | length) > 0 then
+            ($rows | map(select(.status == "completed")) | length)
+          elif $group.status == "completed" then 1
+          else 0
+          end) as $completed
+        | (if ($rows | length) > 0 then ($rows | length) else 1 end) as $total
         | "progress\t\($completed)\t\($total)\t\($group.title)"
         , ($rows[] | "row\t\(.status // "pending")\t\((.step // "") | strip_prefix)")
     ' 2>/dev/null)
@@ -161,6 +165,8 @@ function __ai_codex_signal_line_state --argument-names line
     end
 
     if string match -q '*Working (*' -- "$line"
+        printf '%s\n' working
+    else if string match -q '*Booting MCP server:*esc to interrupt*' -- "$line"
         printf '%s\n' working
     else if string match -q '*Waiting for background terminal*' -- "$line"
         printf '%s\n' working
