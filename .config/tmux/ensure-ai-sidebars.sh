@@ -4,7 +4,7 @@ set -u
 
 width="${1:-26}"
 min_width=$((width + 40))
-sidebar_version="10"
+sidebar_version="15"
 sidebar_command='sleep 0.2; exec fish -c ai-panes-sidebar'
 
 [ -z "${TMUX:-}" ] && exit 0

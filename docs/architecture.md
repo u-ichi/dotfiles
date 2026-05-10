@@ -112,6 +112,11 @@ sidebar 起動後に新規出現した pane は検出時刻を初期時刻とし
 Codex 起動直後の `project | Context ... used` title は status line 由来なので、pane border では
 `@ai_base_title` に保存した短い起動ディレクトリ名を表示する。タスク名 title になった後は
 `#{pane_title}` をそのまま表示する。
+Codex の session log に最新 `update_plan` がある場合、sidebar は active Codex pane の下に
+`explanation` 由来の `Goal:` 行、現在の Task 名を含む `完了数/総数 Task 名`、その Task 配下の
+SubTask 行を表示する。sidebar 上では `Task:` / `SubTask:` prefix を消し、Task 行自体は
+進捗行に集約して重複表示しない。`Goal:` 行は sidebar 幅に合わせて短縮表示し、Goal がない
+plan では進捗行から表示する。
 `@ai_display_index` は `after-split-window` / `after-kill-pane` hook で再採番する。通常 pane が
 全て閉じられて sidebar だけが残った window は `after-kill-pane` hook で
 `cleanup-ai-sidebars.sh` が sidebar を閉じる。sidebar 作成は hook からは行わず、layout 変更は

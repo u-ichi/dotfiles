@@ -58,6 +58,11 @@ function __ai_codex_plan_lines --argument-names session_file max_line_chars
     end
     test -n "$plan_event"; or return 1
 
+    set -l goal_line (printf '%s\n' "$plan_event" | command jq -r '
+        (.payload.arguments | fromjson? | .explanation // "")
+        | select(. != "")
+    ' 2>/dev/null)
+
     set -l plan_rows (printf '%s\n' "$plan_event" | command jq -r '
         (.payload.arguments | fromjson? | .plan // [])
         | to_entries[]
@@ -66,33 +71,74 @@ function __ai_codex_plan_lines --argument-names session_file max_line_chars
     set -l total (count $plan_rows)
     test "$total" -gt 0; or return 1
 
-    set -l completed 0
-    for row in $plan_rows
-        set -l parts (string split -m 2 \t -- "$row")
-        test "$parts[2]" = completed; and set completed (math "$completed + 1")
-    end
+    set -l display_rows (printf '%s\n' "$plan_event" | command jq -r '
+        def strip_prefix: sub("^(Task|SubTask):\\\\s*"; "");
+        (.payload.arguments | fromjson? | .plan // []) as $plan
+        | reduce $plan[] as $item ({groups: []};
+            ($item.step // "") as $step
+            | if ($step | test("^Task:\\\\s*")) then
+                .groups += [{
+                    title: ($step | strip_prefix),
+                    status: ($item.status // "pending"),
+                    rows: []
+                }]
+              elif (.groups | length) == 0 then
+                .groups += [{
+                    title: ($step | strip_prefix),
+                    status: ($item.status // "pending"),
+                    rows: [$item]
+                }]
+              else
+                .groups[-1].rows += [$item]
+              end
+          )
+        | .groups as $groups
+        | (
+            ($groups | map(select((.status == "in_progress") or any(.rows[]?; .status == "in_progress"))) | .[0])
+            // ($groups | map(select((.status != "completed") or any(.rows[]?; .status != "completed"))) | .[0])
+            // $groups[-1]
+          ) as $group
+        | ($group.rows | if length > 0 then . else [{step: $group.title, status: $group.status}] end) as $rows
+        | ($rows | map(select(.status == "completed")) | length) as $completed
+        | ($rows | length) as $total
+        | "progress\t\($completed)\t\($total)\t\($group.title)"
+        , ($rows[] | "row\t\(.status // "pending")\t\((.step // "") | strip_prefix)")
+    ' 2>/dev/null)
+    test (count $display_rows) -gt 0; or return 1
 
-    printf '%s\n' (string shorten -m $max_line_chars -- (printf 'Plan %s/%s' "$completed" "$total"))
+    if test -n "$goal_line"
+        if string match -qr '^\s*(Goal|目標):' -- "$goal_line"
+            printf '%s\n' (string shorten -m $max_line_chars -- "$goal_line")
+        else
+            printf '%s\n' (string shorten -m $max_line_chars -- (printf 'Goal: %s' "$goal_line"))
+        end
+    end
 
     set -l shown 0
-    for row in $plan_rows
-        set -l parts (string split -m 2 \t -- "$row")
-        set -l item_status $parts[2]
-        set -l step $parts[3]
-        set -l marker -
-        switch "$item_status"
-            case completed
-                set marker '✓'
-            case in_progress
-                set marker '>'
-        end
+    set -l display_total 0
+    for display_row in $display_rows
+        set -l parts (string split -m 3 \t -- "$display_row")
+        switch "$parts[1]"
+            case progress
+                set display_total "$parts[3]"
+                printf '%s\n' (string shorten -m $max_line_chars -- (printf '%s/%s %s' "$parts[2]" "$parts[3]" "$parts[4]"))
+            case row
+                set -l item_status $parts[2]
+                set -l marker -
+                switch "$item_status"
+                    case completed
+                        set marker '✓'
+                    case in_progress
+                        set marker '>'
+                end
 
-        set shown (math "$shown + 1")
-        if test "$shown" -le 6
-            printf '%s\n' (string shorten -m $max_line_chars -- (printf '  %s %s' "$marker" "$step"))
+                set shown (math "$shown + 1")
+                if test "$shown" -le 6
+                    printf '%s\n' (string shorten -m $max_line_chars -- (printf '  %s %s' "$marker" "$parts[3]"))
+                end
         end
     end
-    if test "$total" -gt 6
+    if test "$display_total" -gt 6
         printf '%s\n' (string shorten -m $max_line_chars -- '  ...')
     end
 end
