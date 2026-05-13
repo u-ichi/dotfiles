@@ -44,11 +44,17 @@ function __ai_codex_find_session_file --argument-names cwd started_at
     test -n "$best_file"; and printf '%s\n' "$best_file"
 end
 
-function __ai_codex_plan_lines --argument-names session_file max_line_chars
+function __ai_codex_plan_lines --argument-names session_file max_line_chars max_display_lines
     if not command -q jq
         return 1
     end
     test -f "$session_file"; or return 1
+    if not string match -qr '^[0-9]+$' -- "$max_display_lines"
+        set max_display_lines 20
+    end
+    if test "$max_display_lines" -lt 1
+        set max_display_lines 1
+    end
 
     set -l plan_event
     if command -q rg
@@ -94,10 +100,12 @@ function __ai_codex_plan_lines --argument-names session_file max_line_chars
           )
         | .groups as $groups
         | (
-            ($groups | map(select((.status == "in_progress") or any(.rows[]?; .status == "in_progress"))) | .[0])
-            // ($groups | map(select((.status != "completed") or any(.rows[]?; .status != "completed"))) | .[0])
-            // $groups[-1]
-          ) as $group
+            ($groups | to_entries | map(select((.value.status == "in_progress") or any(.value.rows[]?; .status == "in_progress"))) | .[0].key)
+          ) as $active_index
+        | $groups
+        | to_entries[]
+        | .key as $group_index
+        | .value as $group
         | $group.rows as $rows
         | (if ($rows | length) > 0 then
             ($rows | map(select(.status == "completed")) | length)
@@ -105,29 +113,60 @@ function __ai_codex_plan_lines --argument-names session_file max_line_chars
           else 0
           end) as $completed
         | (if ($rows | length) > 0 then ($rows | length) else 1 end) as $total
-        | "progress\t\($completed)\t\($total)\t\($group.title)"
-        , ($rows[] | "row\t\(.status // "pending")\t\((.step // "") | strip_prefix)")
+        | ($group_index == $active_index) as $active
+        | "task\t\($active)\t\($group.status // "pending")\t\($completed)\t\($total)\t\($rows | length)\t\($group.title)"
+        , (if $active then
+            ($rows[] | "row\t\(.status // "pending")\t\((.step // "") | strip_prefix)")
+          else empty end)
     ' 2>/dev/null)
     test (count $display_rows) -gt 0; or return 1
 
+    set -l remaining "$max_display_lines"
     if test -n "$goal_line"
         if string match -qr '^\s*(Goal|目標):' -- "$goal_line"
             printf '%s\n' (string shorten -m $max_line_chars -- "$goal_line")
         else
             printf '%s\n' (string shorten -m $max_line_chars -- (printf 'Goal: %s' "$goal_line"))
         end
+        set remaining (math "$remaining - 1")
     end
 
-    set -l shown 0
-    set -l display_total 0
+    set -l processed 0
+    set -l total_display_rows (count $display_rows)
     for display_row in $display_rows
-        set -l parts (string split -m 3 \t -- "$display_row")
+        if test "$remaining" -le 0
+            break
+        end
+        if test "$remaining" -eq 1; and test "$processed" -lt "$total_display_rows"
+            printf '%s\n' (string shorten -m $max_line_chars -- '...')
+            set remaining 0
+            break
+        end
+
+        set -l parts (string split -m 6 \t -- "$display_row")
         switch "$parts[1]"
-            case progress
-                set display_total "$parts[3]"
-                printf '%s\n' (string shorten -m $max_line_chars -- (printf '%s/%s %s' "$parts[2]" "$parts[3]" "$parts[4]"))
+            case task
+                set -l is_active $parts[2]
+                set -l item_status $parts[3]
+                set -l completed $parts[4]
+                set -l total $parts[5]
+                set -l row_count $parts[6]
+                set -l title $parts[7]
+                set -l marker -
+                if test "$is_active" = true
+                    set marker '>'
+                else if test "$item_status" = completed
+                    set marker '✓'
+                end
+
+                if test "$row_count" -gt 0
+                    printf '%s\n' (string shorten -m $max_line_chars -- (printf '%s %s/%s %s' "$marker" "$completed" "$total" "$title"))
+                else
+                    printf '%s\n' (string shorten -m $max_line_chars -- (printf '%s %s' "$marker" "$title"))
+                end
             case row
-                set -l item_status $parts[2]
+                set -l row_parts (string split -m 2 \t -- "$display_row")
+                set -l item_status $row_parts[2]
                 set -l marker -
                 switch "$item_status"
                     case completed
@@ -136,14 +175,149 @@ function __ai_codex_plan_lines --argument-names session_file max_line_chars
                         set marker '>'
                 end
 
-                set shown (math "$shown + 1")
-                if test "$shown" -le 6
-                    printf '%s\n' (string shorten -m $max_line_chars -- (printf '  %s %s' "$marker" "$parts[3]"))
-                end
+                printf '%s\n' (string shorten -m $max_line_chars -- (printf '  %s %s' "$marker" "$row_parts[3]"))
         end
+        set processed (math "$processed + 1")
+        set remaining (math "$remaining - 1")
     end
-    if test "$display_total" -gt 6
-        printf '%s\n' (string shorten -m $max_line_chars -- '  ...')
+end
+
+function __ai_claude_task_lines --argument-names session_file max_line_chars max_display_lines
+    if not command -q jq
+        return 1
+    end
+    test -f "$session_file"; or return 1
+    if not string match -qr '^[0-9]+$' -- "$max_display_lines"
+        set max_display_lines 20
+    end
+    if test "$max_display_lines" -lt 1
+        set max_display_lines 1
+    end
+
+    # task 関連 event だけ抽出する (TaskCreate / TaskUpdate の tool_use と TaskCreate の tool_result)。
+    # session JSONL は MB 単位なので、まず ripgrep / grep で対象行を絞る。
+    set -l events
+    if command -q rg
+        set events (command rg '"name":"TaskCreate"|"name":"TaskUpdate"|"toolUseResult":\{"task"' "$session_file")
+    else
+        set events (command grep -E '"name":"TaskCreate"|"name":"TaskUpdate"|"toolUseResult":\{"task"' "$session_file")
+    end
+    test (count $events) -gt 0; or return 1
+
+    set -l rendered (printf '%s\n' $events | command jq -rs '
+        [
+          .[]
+          | (
+              ((.message.content // []) | (if (type) == "array" then . else [] end))[]?
+              | select(.type == "tool_use" and (.name == "TaskCreate" or .name == "TaskUpdate"))
+              | if .name == "TaskCreate" then
+                  {kind: "create_use", tuid: .id, subject: .input.subject,
+                   parent: ((.input.metadata // {}).parentTaskId // ""),
+                   goal: ((.input.metadata // {}).goal // "")}
+                else
+                  {kind: "update", tid: (.input.taskId // ""),
+                   subject: (.input.subject // null),
+                   status: (.input.status // null),
+                   parent: ((.input.metadata // {}).parentTaskId // null)}
+                end
+            ),
+            (
+              select(.toolUseResult.task.id != null)
+              | {kind: "create_result",
+                 tuid: ((.message.content // [])[]? | select(.type == "tool_result") | .tool_use_id),
+                 tid: .toolUseResult.task.id}
+            )
+        ]
+        | reduce .[] as $e (
+            {creates: {}, tasks: {}, order: [], goal: null};
+            if $e.kind == "create_use" then
+              .creates[$e.tuid] = {subject: $e.subject, parent: $e.parent, goal: $e.goal}
+            elif $e.kind == "create_result" then
+              (.creates[$e.tuid] // null) as $c
+              | if $c then
+                  .tasks[$e.tid] = {id: $e.tid, subject: $c.subject, parent: $c.parent, status: "pending"}
+                  | .order += [$e.tid]
+                  | (if .goal == null and $c.goal != "" then .goal = $c.goal else . end)
+                  | del(.creates[$e.tuid])
+                else . end
+            elif $e.kind == "update" then
+              ($e.tid) as $tid
+              | (.tasks[$tid] // null) as $t
+              | if $t then
+                  (if $e.subject  then .tasks[$tid].subject = $e.subject  else . end)
+                  | (if $e.status then .tasks[$tid].status = $e.status else . end)
+                  | (if $e.parent != null then .tasks[$tid].parent = $e.parent else . end)
+                else . end
+            else . end
+          )
+        | .order as $order | .tasks as $tasks | .goal as $goal
+        | (if $goal then ["goal\t" + $goal] else [] end)
+          + (
+              [$order[] | $tasks[.]]
+              | map(select(.status != "deleted"))
+              | . as $alive
+              | (map(select(.parent == "")) | map(.id)) as $root_ids
+              | [
+                  $root_ids[] as $rid
+                  | ($alive[] | select(.id == $rid)) as $root
+                  | ($alive | map(select(.parent == $rid))) as $children
+                  | "root\t" + $root.status + "\t" + $root.id + "\t" +
+                    (($children | map(select(.status == "completed")) | length) | tostring) + "/" +
+                    ($children | length | tostring) + "\t" + $root.subject,
+                    ($children[] | "child\t" + .status + "\t" + .id + "\t" + .subject)
+                ]
+            )
+        | .[]
+    ' 2>/dev/null)
+    test (count $rendered) -gt 0; or return 1
+
+    set -l remaining "$max_display_lines"
+    set -l total_rendered (count $rendered)
+    set -l processed 0
+    for line in $rendered
+        if test "$remaining" -le 0
+            break
+        end
+        if test "$remaining" -eq 1; and test "$processed" -lt (math "$total_rendered - 1")
+            printf '%s\n' (string shorten -m $max_line_chars -- '...')
+            set remaining 0
+            break
+        end
+
+        set -l parts (string split -m 4 \t -- "$line")
+        switch "$parts[1]"
+            case goal
+                printf '%s\n' (string shorten -m $max_line_chars -- (printf 'Goal: %s' "$parts[2]"))
+            case root
+                set -l item_status $parts[2]
+                set -l count $parts[4]
+                set -l subject $parts[5]
+                set -l marker -
+                switch "$item_status"
+                    case completed
+                        set marker '✓'
+                    case in_progress
+                        set marker '>'
+                end
+                if test "$count" = "0/0"
+                    printf '%s\n' (string shorten -m $max_line_chars -- (printf '%s %s' "$marker" "$subject"))
+                else
+                    printf '%s\n' (string shorten -m $max_line_chars -- (printf '%s %s %s' "$marker" "$count" "$subject"))
+                end
+            case child
+                set -l item_status $parts[2]
+                set -l subject $parts[4]
+                set -l marker -
+                switch "$item_status"
+                    case completed
+                        set marker '✓'
+                    case in_progress
+                        set marker '>'
+                end
+                printf '%s\n' (string shorten -m $max_line_chars -- (printf '  %s %s' "$marker" "$subject"))
+        end
+        set processed (math "$processed + 1")
+        set remaining (math "$remaining - 1")
     end
 end
 
@@ -225,16 +399,19 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
         set -l active_codex_path
         set -l active_codex_started_at
         set -l active_codex_session_file
+        set -l active_claude_pane
+        set -l active_claude_display
+        set -l active_claude_session_file
         set -l now_hm (date +%H:%M)
         set -l sidebar_window_id (tmux display-message -p -t "$TMUX_PANE" '#{window_id}' 2>/dev/null)
-        set -l raw (tmux list-panes -s -F '#{window_index}.#{pane_index}	#{pane_title}	#{@fixed_title}	#{@ai_base_title}	#{@ai_sidebar}	#{pane_current_path}	#{window_index}	#{@ai_display_index}	#{pane_current_command}	#{pane_id}	#{@ai_state}	#{@ai_state_since}	#{@ai_state_version}	#{pane_active}	#{window_id}	#{@ai_codex_started_at}	#{@ai_codex_session_file}	#{@ai_codex_cwd}' 2>/dev/null)
+        set -l raw (tmux list-panes -s -F '#{window_index}.#{pane_index}	#{pane_title}	#{@fixed_title}	#{@ai_base_title}	#{@ai_sidebar}	#{pane_current_path}	#{window_index}	#{@ai_display_index}	#{pane_current_command}	#{pane_id}	#{@ai_state}	#{@ai_state_since}	#{@ai_state_version}	#{pane_active}	#{window_id}	#{@ai_codex_started_at}	#{@ai_codex_session_file}	#{@ai_codex_cwd}	#{@ai_app}	#{@ai_claude_session_file}' 2>/dev/null)
         set -l writer_pane (tmux list-panes -s -F '#{pane_id}	#{@ai_sidebar}' 2>/dev/null | awk -F '\t' '$2 == "1" {print $1; exit}')
         set -l is_writer 0
         test "$TMUX_PANE" = "$writer_pane"; and set is_writer 1
 
         set -l entries
         for line in $raw
-            set -l parts (string split -m 17 \t -- $line)
+            set -l parts (string split -m 19 \t -- $line)
             set -l loc $parts[1]
             set -l title $parts[2]
             set -l fixed_title $parts[3]
@@ -251,6 +428,8 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             set -l codex_started_at $parts[16]
             set -l codex_session_file $parts[17]
             set -l codex_cwd $parts[18]
+            set -l ai_app $parts[19]
+            set -l claude_session_file $parts[20]
 
             test "$loc" = (tmux display-message -p -t "$TMUX_PANE" '#{window_index}.#{pane_index}' 2>/dev/null); and continue
             test "$is_sidebar" = 1; and continue
@@ -258,10 +437,18 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
 
             set -l display
             set -l is_codex_console 0
-            if string match -q '*codex*' -- $command_name
+            if test "$ai_app" = codex
+                set is_codex_console 1
+            else if string match -q '*codex*' -- $command_name
                 set is_codex_console 1
             else if string match -q '*Context *% used*' -- $title
                 set is_codex_console 1
+            end
+            set -l is_claude_console 0
+            if test "$ai_app" = claude
+                set is_claude_console 1
+            else if string match -q '*claude*' -- $command_name
+                set is_claude_console 1
             end
 
             if test -n "$fixed_title"
@@ -292,7 +479,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             set -l is_llm_console 0
             if test "$is_codex_console" = 1
                 set is_llm_console 1
-            else if string match -q '*claude*' -- $command_name
+            else if test "$is_claude_console" = 1
                 set is_llm_console 1
             end
             set -l console_kind other
@@ -362,10 +549,18 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
                     set active_codex_session_file "$codex_session_file"
                 end
             end
+            if test "$window_id" = "$sidebar_window_id"; and test "$is_claude_console" = 1
+                if test "$pane_active" = 1
+                    set active_claude_pane "$pane_id"
+                    set active_claude_display "$display"
+                    set active_claude_session_file "$claude_session_file"
+                end
+            end
         end
 
         # 全角文字を含むタイトルでも sidebar 内で折り返さないよう pane 幅に合わせて切る。
         set -l pane_width (tmux display-message -p -t "$TMUX_PANE" '#{pane_width}' 2>/dev/null)
+        set -l pane_height (tmux display-message -p -t "$TMUX_PANE" '#{pane_height}' 2>/dev/null)
         set -l max_line_chars (__ai_sidebar_max_line_chars "$pane_width")
         set -l llm_bg_color 2a2a44
         for bucket in working waiting idle
@@ -379,7 +574,9 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
                 test "$row_bucket" = "$bucket"; or continue
 
                 set -l short_row (string shorten -m $max_line_chars -- "$row_text")
-                set -l color_prefix
+                # fish の cartesian 展開で `" "$color_prefix...` が 0 要素にならないよう、
+                # 空でも 1 要素 (空文字) を保つ。
+                set -l color_prefix ""
                 if test "$row_kind" = llm
                     set color_prefix (set_color -b $llm_bg_color)
                 end
@@ -417,13 +614,45 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
 
             set -l plan_lines
             if test -n "$plan_session_file"
-                set plan_lines (__ai_codex_plan_lines "$plan_session_file" "$max_line_chars")
+                if not string match -qr '^[0-9]+$' -- "$pane_height"
+                    set pane_height 30
+                end
+                set -l existing_lines (count $lines)
+                set -l max_plan_lines (math "$pane_height - $existing_lines - 2")
+                if test "$max_plan_lines" -lt 5
+                    set max_plan_lines 5
+                else if test "$max_plan_lines" -gt 24
+                    set max_plan_lines 24
+                end
+                set plan_lines (__ai_codex_plan_lines "$plan_session_file" "$max_line_chars" "$max_plan_lines")
             end
             if test (count $plan_lines) -gt 0
                 set -a lines ""
                 set -a lines (string shorten -m $max_line_chars -- "$active_codex_display")
                 for plan_line in $plan_lines
                     set -a lines " "$plan_line
+                end
+            end
+        end
+
+        # active Claude pane の TaskList を Codex plan tree と同じ枠で表示する。
+        if test -n "$active_claude_pane"; and test -n "$active_claude_session_file"; and test -f "$active_claude_session_file"
+            if not string match -qr '^[0-9]+$' -- "$pane_height"
+                set pane_height 30
+            end
+            set -l existing_lines (count $lines)
+            set -l max_task_lines (math "$pane_height - $existing_lines - 2")
+            if test "$max_task_lines" -lt 5
+                set max_task_lines 5
+            else if test "$max_task_lines" -gt 24
+                set max_task_lines 24
+            end
+            set -l task_lines (__ai_claude_task_lines "$active_claude_session_file" "$max_line_chars" "$max_task_lines")
+            if test (count $task_lines) -gt 0
+                set -a lines ""
+                set -a lines (string shorten -m $max_line_chars -- "$active_claude_display")
+                for task_line in $task_lines
+                    set -a lines " "$task_line
                 end
             end
         end
