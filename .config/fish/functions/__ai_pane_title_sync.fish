@@ -162,7 +162,26 @@ end
 function __ai_pane_title_sync_claude_watch --argument-names pane_id cwd started_at
     set -l last_title ""
     while true
+        # 同 pane 内で claude が再起動された場合、mark-claude が @ai_claude_started_at を
+        # 新値に更新する。watcher 引数の started_at は spawn 時の固定値なので、
+        # 毎ループで pane option から最新値に追従し、変化したら session cache を捨てる。
+        set -l current_started_at (tmux show-option -pqv -t "$pane_id" @ai_claude_started_at 2>/dev/null)
+        if string match -qr '^[0-9]+$' -- "$current_started_at"; and test "$current_started_at" != "$started_at"
+            set started_at "$current_started_at"
+            tmux set-option -p -t "$pane_id" @ai_claude_session_file "" 2>/dev/null
+        end
+
         set -l session_file (tmux show-option -pqv -t "$pane_id" @ai_claude_session_file 2>/dev/null)
+        # @ai_claude_session_file の指す jsonl が現 started_at より明らかに古い場合は
+        # 前 session の cache 残り。mark-claude が呼ばれない経路 (素の command claude 起動等)
+        # への保険として強制 invalidate する。
+        if test -n "$session_file"; and test -f "$session_file"
+            set -l file_mtime (__ai_pane_title_sync_claude_session_mtime "$session_file")
+            if string match -qr '^[0-9]+$' -- "$file_mtime"; and test "$file_mtime" -lt (math "$started_at - 5")
+                set session_file ""
+                tmux set-option -p -t "$pane_id" @ai_claude_session_file "" 2>/dev/null
+            end
+        end
         if test -z "$session_file"; or not test -f "$session_file"
             set session_file (__ai_pane_title_sync_claude_find_session_file "$cwd" "$started_at")
             test -n "$session_file"; and tmux set-option -p -t "$pane_id" @ai_claude_session_file "$session_file" 2>/dev/null
