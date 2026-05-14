@@ -378,6 +378,40 @@ function __ai_codex_visible_state
     test -n "$detected_state"; and printf '%s\n' "$detected_state"
 end
 
+function __ai_claude_signal_line_state --argument-names line
+    # diff 出力行を誤検知シグナルから除外する
+    if string match -qr '^\s*(diff --git|index |--- |\+\+\+ |@@|[+-])' -- "$line"
+        return 1
+    end
+
+    # AskUserQuestion (Submit プロンプト) の footer。
+    # `Enter to select` と `Esc to cancel` が同行に並ぶのは
+    # この prompt の固有 footer なので、応答待ちのシグナルとして拾う。
+    if string match -q '*Enter to select*Esc to cancel*' -- "$line"
+        printf '%s\n' waiting
+        # Permission prompt (Bash / Edit 等の Yes/No 確認)
+    else if string match -q '*Do you want to proceed?*' -- "$line"
+        printf '%s\n' waiting
+    else if string match -q '*Do you want to make this edit*' -- "$line"
+        printf '%s\n' waiting
+    else if string match -q '*Do you want to allow*' -- "$line"
+        printf '%s\n' waiting
+        # ExitPlanMode の承認 prompt
+    else if string match -q '*Would you like to proceed?*' -- "$line"
+        printf '%s\n' waiting
+    end
+end
+
+function __ai_claude_visible_state
+    set -l detected_state
+    while read -l line
+        set -l line_state (__ai_claude_signal_line_state "$line")
+        test -n "$line_state"; and set detected_state "$line_state"
+    end
+
+    test -n "$detected_state"; and printf '%s\n' "$detected_state"
+end
+
 function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
     if not set -q TMUX
         echo "ai-panes-sidebar: not inside tmux" >&2
@@ -388,7 +422,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
     set -l last_target_count 0
     set -l seen_panes
     set -l has_loaded_once 0
-    set -l state_version 2
+    set -l state_version 3
     while true
         set -l lines
         set -l line_targets
@@ -476,6 +510,17 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
                 end
             end
 
+            # Claude pane 側でも capture-pane で AskUserQuestion / Permission prompt を拾う。
+            # title だけだと braille アニメ文字で working と誤判定されるため。
+            set -l claude_user_waiting 0
+            if test "$is_claude_console" = 1
+                set -l visible (tmux capture-pane -p -J -t "$pane_id" 2>/dev/null | tail -24)
+                set -l claude_visible_state (printf '%s\n' $visible | __ai_claude_visible_state)
+                if test "$claude_visible_state" = waiting
+                    set claude_user_waiting 1
+                end
+            end
+
             set -l is_llm_console 0
             if test "$is_codex_console" = 1
                 set is_llm_console 1
@@ -487,6 +532,9 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
 
             set -l detected_state idle
             if test "$codex_user_waiting" = 1
+                set detected_state waiting
+            else if test "$claude_user_waiting" = 1
+                # AskUserQuestion / Permission prompt 表示中は braille title より優先する
                 set detected_state waiting
             else if string match -q '✳*' -- $title
                 set detected_state waiting
