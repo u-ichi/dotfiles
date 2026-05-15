@@ -256,11 +256,11 @@ function __ai_claude_task_lines --argument-names session_file max_line_chars max
               [$order[] | $tasks[.]]
               | map(select(.status != "deleted"))
               | . as $alive
-              | (map(select(.parent == "")) | map(.id)) as $root_ids
+              | (map(select((.parent | tostring) == "")) | map(.id)) as $root_ids
               | [
                   $root_ids[] as $rid
                   | ($alive[] | select(.id == $rid)) as $root
-                  | ($alive | map(select(.parent == $rid))) as $children
+                  | ($alive | map(select((.parent | tostring) == $rid))) as $children
                   | "root\t" + $root.status + "\t" + $root.id + "\t" +
                     (($children | map(select(.status == "completed")) | length) | tostring) + "/" +
                     ($children | length | tostring) + "\t" + $root.subject,
@@ -449,7 +449,8 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
     # awk で読み取り、live sidebar pane の respawn 判定にも使う。
     # 関数のロジックを書き換えたら必ずこの数値を上げる (live writer pane は fish の
     # autoload で旧版を memory に抱え続けるため、bump → respawn でしか反映できない)。
-    set -l state_version 6
+    # v8 以降は writer 自身が state_version をファイルから読んで自己 re-exec する。
+    set -l state_version 8
     while true
         set -l lines
         set -l line_targets
@@ -759,6 +760,17 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             printf '\033[2J\033[H'
             printf '%s\n' $lines
             set last_output "$output"
+        end
+
+        # state_version self-check: ファイル上の state_version が bump されたら自己 re-exec。
+        # tmux event (after-new-session 等) を待たずに編集を反映するための fallback。
+        # ensure-ai-sidebars.sh が次に走った時 (新 window 等) には @ai_sidebar_version が
+        # 更新され整合する。
+        if test "$is_writer" = 1
+            set -l file_version (command awk '/^[[:space:]]*set -l state_version[[:space:]]+[0-9]+/ {print $4; exit}' $HOME/.config/fish/functions/ai-panes-sidebar.fish 2>/dev/null)
+            if test -n "$file_version"; and test "$file_version" != "$state_version"
+                exec fish -c ai-panes-sidebar
+            end
         end
 
         sleep 2
