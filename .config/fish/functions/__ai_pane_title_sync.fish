@@ -100,8 +100,22 @@ function __ai_pane_title_sync_codex_thread_title --argument-names session_file
 end
 
 function __ai_pane_title_sync_codex_watch --argument-names pane_id cwd started_at fallback_title
+    # NOTE: 関数定義ファイル更新を検知したら新版で自己 exec する (live 反映機構)。
+    # fish の autoload キャッシュも source 済みプロセスも reload しないため、
+    # watch loop が旧版で動き続ける問題を防ぐ。
+    set -l function_path "$HOME/.config/fish/functions/__ai_pane_title_sync.fish"
+    # -L (stat(2) = symlink follow) 必須: BSD stat (macOS) default は lstat(2) で
+    # symlink 自体の mtime しか返さない。GNU stat (Linux) は default 辿るが -L も同義。
+    set -l watch_mtime (command stat -L -f %m "$function_path" 2>/dev/null; or command stat -L -c %Y "$function_path" 2>/dev/null)
     set -l last_title ""
     while true
+        if test -n "$watch_mtime"
+            set -l current_mtime (command stat -L -f %m "$function_path" 2>/dev/null; or command stat -L -c %Y "$function_path" 2>/dev/null)
+            if test -n "$current_mtime"; and test "$current_mtime" != "$watch_mtime"
+                exec command fish -c 'source $argv[1]; __ai_pane_title_sync codex-watch $argv[2] $argv[3] $argv[4] $argv[5]' "$function_path" "$pane_id" "$cwd" "$started_at" "$fallback_title"
+            end
+        end
+
         set -l session_file (tmux show-option -pqv -t "$pane_id" @ai_codex_session_file 2>/dev/null)
         if test -z "$session_file"; or not test -f "$session_file"
             set session_file (__ai_pane_title_sync_codex_find_session_file "$cwd" "$started_at")
@@ -160,8 +174,22 @@ function __ai_pane_title_sync_claude_slug --argument-names session_file
 end
 
 function __ai_pane_title_sync_claude_watch --argument-names pane_id cwd started_at
+    # NOTE: 関数定義ファイル更新を検知したら新版で自己 exec する (live 反映機構)。
+    # fish の autoload キャッシュも source 済みプロセスも reload しないため、
+    # watch loop が旧版で動き続ける問題を防ぐ。
+    set -l function_path "$HOME/.config/fish/functions/__ai_pane_title_sync.fish"
+    # -L (stat(2) = symlink follow) 必須: BSD stat (macOS) default は lstat(2) で
+    # symlink 自体の mtime しか返さない。GNU stat (Linux) は default 辿るが -L も同義。
+    set -l watch_mtime (command stat -L -f %m "$function_path" 2>/dev/null; or command stat -L -c %Y "$function_path" 2>/dev/null)
     set -l last_title ""
     while true
+        if test -n "$watch_mtime"
+            set -l current_mtime (command stat -L -f %m "$function_path" 2>/dev/null; or command stat -L -c %Y "$function_path" 2>/dev/null)
+            if test -n "$current_mtime"; and test "$current_mtime" != "$watch_mtime"
+                exec command fish -c 'source $argv[1]; __ai_pane_title_sync claude-watch $argv[2] $argv[3] $argv[4]' "$function_path" "$pane_id" "$cwd" "$started_at"
+            end
+        end
+
         # 同 pane 内で claude が再起動された場合、mark-claude が @ai_claude_started_at を
         # 新値に更新する。watcher 引数の started_at は spawn 時の固定値なので、
         # 毎ループで pane option から最新値に追従し、変化したら session cache を捨てる。

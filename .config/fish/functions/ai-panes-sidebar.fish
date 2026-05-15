@@ -394,24 +394,42 @@ function __ai_claude_signal_line_state --argument-names line
     # コマンドや出力に出てこない)。
     if string match -q '*Enter to select*↑/↓ to navigate*Esc to cancel*' -- "$line"
         printf '%s\n' waiting
-        # Permission prompt (Bash / Edit 等の Yes/No 確認)
-    else if string match -q '*Do you want to proceed?*' -- "$line"
-        printf '%s\n' waiting
-    else if string match -q '*Do you want to make this edit*' -- "$line"
-        printf '%s\n' waiting
-    else if string match -q '*Do you want to allow*' -- "$line"
-        printf '%s\n' waiting
-        # ExitPlanMode の承認 prompt
-    else if string match -q '*Would you like to proceed?*' -- "$line"
-        printf '%s\n' waiting
     end
+    # Permission prompt (Do you want to ... / Would you like to proceed?) は単独行
+    # ではコマンドエコーで誤検知しやすいため、__ai_claude_visible_state 側で
+    # 「question 行 + 直下 5 行以内に `❯ 1. ` 選択肢行」のペアでのみ waiting と判定する。
 end
 
 function __ai_claude_visible_state
     set -l detected_state
+    set -l prompt_question_line_no 0
+    set -l line_no 0
     while read -l line
+        set line_no (math $line_no + 1)
+
+        # 直接シグナル (AskUserQuestion footer 等、context 不要)。
         set -l line_state (__ai_claude_signal_line_state "$line")
         test -n "$line_state"; and set detected_state "$line_state"
+
+        # Permission prompt / ExitPlanMode 承認の question 行を記憶する。
+        if string match -q '*Do you want to proceed?*' -- "$line"
+            set prompt_question_line_no $line_no
+        else if string match -q '*Do you want to make this edit*' -- "$line"
+            set prompt_question_line_no $line_no
+        else if string match -q '*Do you want to allow*' -- "$line"
+            set prompt_question_line_no $line_no
+        else if string match -q '*Would you like to proceed?*' -- "$line"
+            set prompt_question_line_no $line_no
+        end
+
+        # `❯ 1. ` で始まる選択肢行が、直前 5 行以内の question とペアになっていれば
+        # 真の Permission prompt と判定する (コマンドエコーで question 文字列だけが
+        # 出た状態は選択肢を伴わないので誤検知しない)。
+        if string match -qr '^\s*❯\s+[0-9]+\.\s+' -- "$line"
+            if test "$prompt_question_line_no" -gt 0; and test (math $line_no - $prompt_question_line_no) -le 5
+                set detected_state waiting
+            end
+        end
     end
 
     test -n "$detected_state"; and printf '%s\n' "$detected_state"
@@ -431,7 +449,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
     # awk で読み取り、live sidebar pane の respawn 判定にも使う。
     # 関数のロジックを書き換えたら必ずこの数値を上げる (live writer pane は fish の
     # autoload で旧版を memory に抱え続けるため、bump → respawn でしか反映できない)。
-    set -l state_version 5
+    set -l state_version 6
     while true
         set -l lines
         set -l line_targets
