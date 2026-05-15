@@ -385,9 +385,14 @@ function __ai_claude_signal_line_state --argument-names line
     end
 
     # AskUserQuestion (Submit プロンプト) の footer。
-    # `Enter to select` と `Esc to cancel` が同行に並ぶのは
+    # `Enter to select · ↑/↓ to navigate · Esc to cancel` が同行に並ぶのは
     # この prompt の固有 footer なので、応答待ちのシグナルとして拾う。
-    if string match -q '*Enter to select*Esc to cancel*' -- "$line"
+    # `↑/↓ to navigate` を必須条件にしているのは、agent 自身が Bash 等で
+    # `Enter to select` / `Esc to cancel` をキーワード文字列として入力した時、
+    # Claude Code TUI のコマンドエコーで capture-pane に出てしまい
+    # 誤検知するのを防ぐため (難読 char を含む `↑/↓ to navigate` は通常の
+    # コマンドや出力に出てこない)。
+    if string match -q '*Enter to select*↑/↓ to navigate*Esc to cancel*' -- "$line"
         printf '%s\n' waiting
         # Permission prompt (Bash / Edit 等の Yes/No 確認)
     else if string match -q '*Do you want to proceed?*' -- "$line"
@@ -422,7 +427,11 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
     set -l last_target_count 0
     set -l seen_panes
     set -l has_loaded_once 0
-    set -l state_version 3
+    # NOTE: この state_version は ensure-ai-sidebars.sh / test-ai-sidebars-isolated.sh が
+    # awk で読み取り、live sidebar pane の respawn 判定にも使う。
+    # 関数のロジックを書き換えたら必ずこの数値を上げる (live writer pane は fish の
+    # autoload で旧版を memory に抱え続けるため、bump → respawn でしか反映できない)。
+    set -l state_version 5
     while true
         set -l lines
         set -l line_targets

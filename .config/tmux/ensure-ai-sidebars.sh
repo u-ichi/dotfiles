@@ -4,7 +4,11 @@ set -u
 
 width="${1:-26}"
 min_width=$((width + 40))
-sidebar_version="19"
+# sidebar_version は ai-panes-sidebar.fish の state_version を権威ソースとして自動同期する。
+# 関数ロジック変更時の live 反映 (respawn-pane) 漏れを防ぐため hard-code しない。
+sidebar_version_source="$HOME/.config/fish/functions/ai-panes-sidebar.fish"
+sidebar_version="$(/usr/bin/awk '/^[[:space:]]*set -l state_version[[:space:]]+[0-9]+/ {print $4; exit}' "$sidebar_version_source" 2>/dev/null)"
+[ -z "$sidebar_version" ] && sidebar_version="unknown"
 sidebar_command='sleep 0.2; exec fish -c ai-panes-sidebar'
 
 [ -z "${TMUX:-}" ] && exit 0

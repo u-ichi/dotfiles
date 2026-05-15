@@ -122,8 +122,9 @@ fi
 
 TMUX="$SOCKET,0,0" "$SCRIPT_DIR/ensure-ai-sidebars.sh"
 wait_for_sidebar 'ai-sidebar-test:1'
-if [ "$(sidebar_version 'ai-sidebar-test:1')" != "19" ]; then
-  echo "ERROR: sidebar version was not recorded" >&2
+expected_sidebar_version="$(/usr/bin/awk '/^[[:space:]]*set -l state_version[[:space:]]+[0-9]+/ {print $4; exit}' "$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish")"
+if [ "$(sidebar_version 'ai-sidebar-test:1')" != "$expected_sidebar_version" ]; then
+  echo "ERROR: sidebar version was not recorded (expected: $expected_sidebar_version)" >&2
   exit 1
 fi
 
