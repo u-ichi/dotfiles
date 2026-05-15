@@ -200,19 +200,25 @@ function __ai_pane_title_sync_claude_watch --argument-names pane_id cwd started_
         end
 
         set -l session_file (tmux show-option -pqv -t "$pane_id" @ai_claude_session_file 2>/dev/null)
-        # @ai_claude_session_file の指す jsonl が現 started_at より明らかに古い場合は
-        # 前 session の cache 残り。mark-claude が呼ばれない経路 (素の command claude 起動等)
-        # への保険として強制 invalidate する。
-        if test -n "$session_file"; and test -f "$session_file"
-            set -l file_mtime (__ai_pane_title_sync_claude_session_mtime "$session_file")
-            if string match -qr '^[0-9]+$' -- "$file_mtime"; and test "$file_mtime" -lt (math "$started_at - 5")
-                set session_file ""
-                tmux set-option -p -t "$pane_id" @ai_claude_session_file "" 2>/dev/null
+        # 毎ループ最新の候補を find する。session_file 未設定なら採用、設定済みでも
+        # 候補の mtime が現 session_file より新しければ切り替える。
+        # find_session_file 自体が「mtime ≥ started_at - 5」を必須条件にしているため、
+        # 古い jsonl は候補に入らず、新 jsonl があれば mtime 比較で必ず上書きされる。
+        # よって cff3f05 で導入した別途の mtime invalidate (ブロックで強制クリア) は
+        # ここでは不要 (新ロジックで覆われる)。
+        set -l candidate (__ai_pane_title_sync_claude_find_session_file "$cwd" "$started_at")
+        if test -n "$candidate"
+            if test -z "$session_file"; or not test -f "$session_file"
+                set session_file "$candidate"
+                tmux set-option -p -t "$pane_id" @ai_claude_session_file "$session_file" 2>/dev/null
+            else if test "$candidate" != "$session_file"
+                set -l candidate_mtime (__ai_pane_title_sync_claude_session_mtime "$candidate")
+                set -l current_mtime (__ai_pane_title_sync_claude_session_mtime "$session_file")
+                if string match -qr '^[0-9]+$' -- "$candidate_mtime"; and string match -qr '^[0-9]+$' -- "$current_mtime"; and test "$candidate_mtime" -gt "$current_mtime"
+                    set session_file "$candidate"
+                    tmux set-option -p -t "$pane_id" @ai_claude_session_file "$session_file" 2>/dev/null
+                end
             end
-        end
-        if test -z "$session_file"; or not test -f "$session_file"
-            set session_file (__ai_pane_title_sync_claude_find_session_file "$cwd" "$started_at")
-            test -n "$session_file"; and tmux set-option -p -t "$pane_id" @ai_claude_session_file "$session_file" 2>/dev/null
         end
 
         if test -n "$session_file"
