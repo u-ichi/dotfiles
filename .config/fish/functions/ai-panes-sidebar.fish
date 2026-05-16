@@ -251,7 +251,17 @@ function __ai_claude_task_lines --argument-names session_file max_line_chars max
             else . end
           )
         | .order as $order | .tasks as $tasks | .goal as $goal
-        | (if $goal then ["goal\t" + $goal] else [] end)
+        # subject から `[#N系]` 親参照 prefix を strip する。Codex 側で `Task:` /
+        # `SubTask:` prefix を strip しているのと同じ display layer 整形。
+        # 親子関係は parentTaskId + ツリーインデントで表現されるため、subject 内の
+        # 親参照テキストは renderer 段階で不可視にする。
+        | def strip_claude_prefix:
+            # 順番: `#N` / `#?` (先頭 ID prefix) → `[#N系]` (親参照) → 余白
+            sub("^#[0-9?]+\\\\s+"; "")
+            | sub("\\\\s*\\\\[#[0-9]+系\\\\]\\\\s*"; " ")
+            | sub("^ +"; "")
+            | sub(" +$"; "");
+          (if $goal then ["goal\t" + ($goal | strip_claude_prefix)] else [] end)
           + (
               [$order[] | $tasks[.]]
               | map(select(.status != "deleted"))
@@ -263,8 +273,8 @@ function __ai_claude_task_lines --argument-names session_file max_line_chars max
                   | ($alive | map(select((.parent | tostring) == $rid))) as $children
                   | "root\t" + $root.status + "\t" + $root.id + "\t" +
                     (($children | map(select(.status == "completed")) | length) | tostring) + "/" +
-                    ($children | length | tostring) + "\t" + $root.subject,
-                    ($children[] | "child\t" + .status + "\t" + .id + "\t" + .subject)
+                    ($children | length | tostring) + "\t" + ($root.subject | strip_claude_prefix),
+                    ($children[] | "child\t" + .status + "\t" + .id + "\t" + (.subject | strip_claude_prefix))
                 ]
             )
         | .[]
@@ -293,28 +303,40 @@ function __ai_claude_task_lines --argument-names session_file max_line_chars max
                 set -l count $parts[4]
                 set -l subject $parts[5]
                 set -l marker -
+                set -l color_start ""
+                set -l color_end ""
                 switch "$item_status"
                     case completed
                         set marker '✓'
                     case in_progress
-                        set marker '>'
+                        # pane list の working 表示 (▶ + 緑) と統一
+                        set marker '▶'
+                        set color_start (set_color green)
+                        set color_end (set_color normal)
                 end
+                set -l shortened
                 if test "$count" = "0/0"
-                    printf '%s\n' (string shorten -m $max_line_chars -- (printf '%s %s' "$marker" "$subject"))
+                    set shortened (string shorten -m $max_line_chars -- (printf '%s %s' "$marker" "$subject"))
                 else
-                    printf '%s\n' (string shorten -m $max_line_chars -- (printf '%s %s %s' "$marker" "$count" "$subject"))
+                    set shortened (string shorten -m $max_line_chars -- (printf '%s %s %s' "$marker" "$count" "$subject"))
                 end
+                printf '%s%s%s\n' "$color_start" "$shortened" "$color_end"
             case child
                 set -l item_status $parts[2]
                 set -l subject $parts[4]
                 set -l marker -
+                set -l color_start ""
+                set -l color_end ""
                 switch "$item_status"
                     case completed
                         set marker '✓'
                     case in_progress
-                        set marker '>'
+                        set marker '▶'
+                        set color_start (set_color green)
+                        set color_end (set_color normal)
                 end
-                printf '%s\n' (string shorten -m $max_line_chars -- (printf '  %s %s' "$marker" "$subject"))
+                set -l shortened (string shorten -m $max_line_chars -- (printf '  %s %s' "$marker" "$subject"))
+                printf '%s%s%s\n' "$color_start" "$shortened" "$color_end"
         end
         set processed (math "$processed + 1")
         set remaining (math "$remaining - 1")
@@ -450,7 +472,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
     # 関数のロジックを書き換えたら必ずこの数値を上げる (live writer pane は fish の
     # autoload で旧版を memory に抱え続けるため、bump → respawn でしか反映できない)。
     # v8 以降は writer 自身が state_version をファイルから読んで自己 re-exec する。
-    set -l state_version 8
+    set -l state_version 14
     while true
         set -l lines
         set -l line_targets
@@ -573,23 +595,34 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             end
 
             set -l display_state $cached_state
-            if test "$cached_version" != "$state_version"
-                set display_state ""
-                set state_since ""
+            # state_since を now にすべき初観測 / 再観測ケースをまとめて判定する。
+            #   1. cached_state が空 (この pane を初めて見る)
+            #   2. cached_version が writer の state_version と不一致 (writer 再起動後の初観測)
+            #   3. is_writer かつ pane が seen_panes に無い (writer ループ起動後に新規追加された pane)
+            # いずれにも該当しない場合のみ、後段の「state 変化検知」で必要時に now にする。
+            set -l needs_fresh_state 0
+            if test -z "$cached_state"
+                set needs_fresh_state 1
+            else if test "$cached_version" != "$state_version"
+                set needs_fresh_state 1
+            else if test "$is_writer" = 1; and not contains -- "$pane_id" $seen_panes
+                set needs_fresh_state 1
             end
+            if test "$needs_fresh_state" = 1
+                set display_state $detected_state
+                set state_since "$now_hm"
+            end
+            # 既知 pane で state が変化した場合は now に更新
+            if test "$needs_fresh_state" = 0; and test -n "$cached_state"; and test "$detected_state" != "$cached_state"
+                set display_state $detected_state
+                set state_since "$now_hm"
+            end
+            # 最終 fallback (上記いずれにも該当しないが state_since が未設定なら "--:--")
             if test -z "$display_state"
                 set display_state $detected_state
             end
             if test -z "$state_since"
                 set state_since "--:--"
-            end
-            if test "$is_writer" = 1; and test "$has_loaded_once" = 1; and not contains -- "$pane_id" $seen_panes
-                set display_state $detected_state
-                set state_since "$now_hm"
-            end
-            if test -n "$cached_state"; and test "$detected_state" != "$cached_state"
-                set display_state $detected_state
-                set state_since "$now_hm"
             end
             if test "$is_writer" = 1
                 tmux set-option -p -t "$pane_id" @ai_state "$display_state" 2>/dev/null
@@ -694,11 +727,10 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
                     set pane_height 30
                 end
                 set -l existing_lines (count $lines)
+                # pane 高さの範囲内で全 plan を表示 (上限 cap 撤廃、Claude 側と整合)。
                 set -l max_plan_lines (math "$pane_height - $existing_lines - 2")
                 if test "$max_plan_lines" -lt 5
                     set max_plan_lines 5
-                else if test "$max_plan_lines" -gt 24
-                    set max_plan_lines 24
                 end
                 set plan_lines (__ai_codex_plan_lines "$plan_session_file" "$max_line_chars" "$max_plan_lines")
             end
@@ -717,11 +749,10 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
                 set pane_height 30
             end
             set -l existing_lines (count $lines)
+            # pane 高さの範囲内で全 task を表示 (上限 cap 撤廃)。
             set -l max_task_lines (math "$pane_height - $existing_lines - 2")
             if test "$max_task_lines" -lt 5
                 set max_task_lines 5
-            else if test "$max_task_lines" -gt 24
-                set max_task_lines 24
             end
             set -l task_lines (__ai_claude_task_lines "$active_claude_session_file" "$max_line_chars" "$max_task_lines")
             if test (count $task_lines) -gt 0
