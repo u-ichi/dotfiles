@@ -16,6 +16,20 @@ function __claude_ensure_ai_pane_title_sync
     test -n "$helper_path"; and source "$helper_path"
 end
 
+# watcher process tree を leaves から root の順に kill する。
+# claude.fish は `command fish -c '...' &` で watcher を spawn するが、実体は
+# `/bin/sh /usr/bin/command fish` の 3 階層プロセスツリーで、`$last_pid` で
+# 取れるのは top の sh wrapper のみ。top だけ kill すると中段 sh / 下段 fish が
+# PID=1 に reparent されて orphan watcher として残り、新セッション開始後も
+# pane option (@ai_claude_session_file) を奪い合う race を起こす。
+function __claude_kill_tree --argument-names pid
+    test -n "$pid"; or return 0
+    for child in (command pgrep -P "$pid" 2>/dev/null)
+        __claude_kill_tree "$child"
+    end
+    command kill "$pid" 2>/dev/null
+end
+
 function __claude_physical_path
     set -l path $argv[1]
     set -l old_pwd "$PWD"
@@ -58,12 +72,24 @@ function __claude_run
         set -l physical_pwd (__claude_physical_path "$PWD")
         set -l started_at (date +%s)
         set -l fallback_title (__claude_fallback_title $argv)
+
+        # spawn 前に同 pane の旧 watcher を強制 kill する。
+        # __ai_pane_title_sync.fish の self-reload (mtime check + exec) が走ると
+        # 旧 watcher が adopt 後の started_at を引き継いで生き残るため、
+        # 「started_at 不一致で self-exit」だけでは race を完全に塞げない。
+        # pane option に登録した PID を tree kill するのが確実な始末方法。
+        for old_pid in (string split ' ' -- (tmux show-option -pqv -t "$TMUX_PANE" @ai_claude_watcher_pids 2>/dev/null))
+            test -n "$old_pid"; and __claude_kill_tree "$old_pid"
+        end
+        tmux set-option -p -t "$TMUX_PANE" @ai_claude_watcher_pids "" 2>/dev/null
+
         __ai_pane_title_sync mark-claude "$TMUX_PANE" "$started_at" "$physical_pwd"
         __ai_pane_title_sync set-base "$TMUX_PANE" "$fallback_title" claude-fallback
         set -l helper_path (__claude_ai_pane_title_sync_path)
         if test -n "$helper_path"
             command fish -c 'source "$argv[1]"; sleep 0.5; __ai_pane_title_sync claude-watch "$argv[2]" "$argv[3]" "$argv[4]"' "$helper_path" "$TMUX_PANE" "$physical_pwd" "$started_at" >/dev/null 2>&1 &
             set watcher_pid $last_pid
+            tmux set-option -p -t "$TMUX_PANE" @ai_claude_watcher_pids "$watcher_pid" 2>/dev/null
         end
     end
 
@@ -71,11 +97,12 @@ function __claude_run
     set -l exit_code $status
 
     if test -n "$watcher_pid"
-        kill $watcher_pid 2>/dev/null
+        __claude_kill_tree $watcher_pid
     end
     if set -q TMUX; and set -q TMUX_PANE
         __claude_ensure_ai_pane_title_sync
         __ai_pane_title_sync clear "$TMUX_PANE"
+        tmux set-option -p -t "$TMUX_PANE" @ai_claude_watcher_pids "" 2>/dev/null
     end
     return $exit_code
 end

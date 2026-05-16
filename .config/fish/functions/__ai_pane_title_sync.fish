@@ -190,13 +190,17 @@ function __ai_pane_title_sync_claude_watch --argument-names pane_id cwd started_
             end
         end
 
-        # 同 pane 内で claude が再起動された場合、mark-claude が @ai_claude_started_at を
-        # 新値に更新する。watcher 引数の started_at は spawn 時の固定値なので、
-        # 毎ループで pane option から最新値に追従し、変化したら session cache を捨てる。
+        # watcher は spawn 時の (pane_id, started_at) ペアに 1:1 で縛る。
+        # 同 pane で別 claude セッションが起動した場合 (mark-claude で started_at 更新) や
+        # claude が exit した場合 (clear で started_at が空) には、新セッション用の
+        # watcher が claude.fish 側で別途 spawn されているので自身は exit する。
+        # 旧設計は started_at を adopt して継続していたが、cwd は spawn 時固定のため
+        # 「新 started_at × 旧 cwd」で find_session_file を続け、別 project の jsonl を
+        # 拾って pane option を上書きする race を起こしていた (orphan watcher が
+        # PID=1 reparent 後も生き残り、新 watcher が書いた cfile を 2 秒間隔で奪う)。
         set -l current_started_at (tmux show-option -pqv -t "$pane_id" @ai_claude_started_at 2>/dev/null)
-        if string match -qr '^[0-9]+$' -- "$current_started_at"; and test "$current_started_at" != "$started_at"
-            set started_at "$current_started_at"
-            tmux set-option -p -t "$pane_id" @ai_claude_session_file "" 2>/dev/null
+        if test "$current_started_at" != "$started_at"
+            exit 0
         end
 
         set -l session_file (tmux show-option -pqv -t "$pane_id" @ai_claude_session_file 2>/dev/null)
