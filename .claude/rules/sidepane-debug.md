@@ -11,17 +11,29 @@ agent が `~/.claude/tasks/`・progress JSON・Claude Code バイナリ等を回
 (`.config/fish/functions/ai-panes-sidebar.fish`) が 2 秒間隔で書き込んでいる。
 
 - **writer pane の識別**: tmux option `@ai_sidebar=1` を持つ pane
+- **Claude セッションの識別情報**: tmux pane option (`@ai_claude_session_id` /
+  `@ai_claude_cwd` / `@ai_claude_started_at` / `@ai_app`)。これらは base-repo の
+  Claude Code SessionStart hook (`home/scripts/claude/sidepane-session-start.sh`)
+  が直接書き込み、SessionEnd hook が clear する
 - **Claude セッションの task 表示データソース**: **transcript JSONL**
-  (`~/.claude/projects/<encoded-path>/<session_id>.jsonl`)
+  (`~/.claude/projects/<encoded-cwd>/<session_id>.jsonl`)。session_id + cwd から
+  決定論的に組み立てる (mtime + cwd ヒューリスティック探索は廃止済)
+- **encoded-cwd の規約**: 英数字とハイフン以外 (`/`, `@`, `.`, space 等すべて) を
+  `-` に置換。連続 `-` は merge しない
 - **描画ロジック**: `__ai_claude_task_lines` 関数。transcript から `TaskCreate` /
   `TaskUpdate` / `tool_result` を `rg` / `grep` で抽出し、`jq` でリプレイ →
   goal + root Task + 直接 child (= SubTask) を整形
+- **Codex 側は別経路**: Codex は SessionStart hook を未登録のため、
+  `__ai_pane_title_sync codex-watch` が mtime + cwd ヒューリスティックで
+  `~/.codex/sessions/.../rollout-*-<uuid>.jsonl` を探索する経路を維持する
 
 ### 使われていないもの (混同しない)
 
 - ❌ `~/.claude/tasks/<session>/*.json` (Claude Code 内部状態。サイドペインは読まない)
 - ❌ `~/.claude/progress-<session>.json` (statusline 用。サイドペインは読まない)
 - ❌ Claude Code app バイナリの内部状態 (サイドペインに無関係)
+- ❌ `@ai_claude_session_file` / `@ai_claude_watcher_pids` (旧 watcher 機構の遺物。
+  2026-05-16 撤廃済み。新コードからは読まない)
 
 ## 切り分け Step (必ずこの順)
 
@@ -46,22 +58,37 @@ done
 「キャッシュファイル = `~/.claude/tasks/` 等のディスク上 file」**ではない**。
 writer pane の capture-pane 出力が "描画キャッシュ"。
 
-### Step 2: データソース (transcript) の状態を再構築
+### Step 2: pane option を確認 (session_id / cwd が正しいか)
+
+```bash
+# 該当 pane の Claude session option を dump
+tmux show-option -pqv -t <pane_id> @ai_claude_session_id
+tmux show-option -pqv -t <pane_id> @ai_claude_cwd
+tmux show-option -pqv -t <pane_id> @ai_app
+```
+
+- `@ai_claude_session_id` が空 → SessionStart hook が走ってない可能性
+  (claude を fish 関数経由で起動したか、hook が登録されてるか確認)
+- `@ai_claude_cwd` が pane の `pane_current_path` と異なる → subagent / sidechain
+  session が誤って書いた可能性 (hook の cwd mismatch skip が効いていれば起きない)
+
+### Step 3: データソース (transcript) の状態を再構築
 
 writer pane の表示と「あるべき表示」を比較するため、同じ jq reducer を直接実行。
 reducer は `.config/fish/functions/ai-panes-sidebar.fish` の `__ai_claude_task_lines`
 内にあるので、そこからコピーする (重複定義しない)。
 
-該当セッションの transcript:
+該当セッションの transcript path 組み立て:
 
 ```
 ~/.claude/projects/<encoded-cwd>/<session_id>.jsonl
 ```
 
-encoded-cwd は cwd のスラッシュを `-` に置き換えたもの (例:
-`/Users/u1/foo/bar` → `-Users-u1-foo-bar`)。
+encoded-cwd は cwd の英数字とハイフン以外を `-` に置換した形式 (例:
+`/Users/u1@example.com/My Drive/foo` →
+`-Users-u1-example-com-My-Drive-foo`)。fish 関数では `__ai_encode_cwd` を使う。
 
-### Step 3: 表示 vs 再構築の差分を見て切り分け
+### Step 4: 表示 vs 再構築の差分を見て切り分け
 
 | 観察 | 解釈 |
 |------|------|
@@ -100,7 +127,25 @@ silent drop。比較時は `(.field | tostring)` で正規化されているか�
 
 または、writer 内蔵の self-version-check (v8 以降) が自動 re-exec する。
 
-### 罠 5: 親子階層は Goal/Task/SubTask の 3 レベル固定
+### 罠 5: subagent / sidechain の hook が pane option を上書き
+
+Claude Code は subagent / sidechain session を内部で発行する時にも SessionStart
+hook を発火する。これらは親 pane の `$TMUX_PANE` を継承するため、メイン session の
+pane option を一時的に上書きする race を起こしうる。
+
+対策は 2 層で実装済み:
+
+1. **hook 側 (sidepane-session-start.sh)**: stdin の `cwd` と pane の
+   `pane_current_path` を比較して、不一致なら no-op で exit。subagent は通常
+   別 cwd で動くので skip される
+2. **renderer 側 (ai-panes-sidebar.fish)**: pane option の `@ai_claude_cwd` と
+   pane の `pane_current_path` を比較して、一致しない時は task tree 描画を skip
+   (option が誤って書かれた場合の最後の防護)
+
+「task tree が一瞬出たり消えたりする」「pane option がチカチカ変わる」と訴え
+られたら、まず hook 側の cwd skip が効いてるかを確認する。
+
+### 罠 6: 親子階層は Goal/Task/SubTask の 3 レベル固定
 
 renderer は root → 直接 child の 1 段下までしか描画しない。深い階層の task は
 表示されない。詳細は claude-code-base-repository 側の

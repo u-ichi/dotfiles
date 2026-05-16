@@ -16,20 +16,6 @@ function __claude_ensure_ai_pane_title_sync
     test -n "$helper_path"; and source "$helper_path"
 end
 
-# watcher process tree を leaves から root の順に kill する。
-# claude.fish は `command fish -c '...' &` で watcher を spawn するが、実体は
-# `/bin/sh /usr/bin/command fish` の 3 階層プロセスツリーで、`$last_pid` で
-# 取れるのは top の sh wrapper のみ。top だけ kill すると中段 sh / 下段 fish が
-# PID=1 に reparent されて orphan watcher として残り、新セッション開始後も
-# pane option (@ai_claude_session_file) を奪い合う race を起こす。
-function __claude_kill_tree --argument-names pid
-    test -n "$pid"; or return 0
-    for child in (command pgrep -P "$pid" 2>/dev/null)
-        __claude_kill_tree "$child"
-    end
-    command kill "$pid" 2>/dev/null
-end
-
 function __claude_physical_path
     set -l path $argv[1]
     set -l old_pwd "$PWD"
@@ -63,46 +49,31 @@ function __claude_fallback_title
 end
 
 # Claude Code 起動の内部ヘルパ。worktree モードのフラグ分岐から共通で呼ぶ。
-# pane_title の OSC 2 リセットは claude-code-base-repository 側の
-# SessionEnd hook (session-end-reset-pane-title.sh) が担当する。
+#
+# session 情報 (session_id / cwd / started_at) の pane option 書き込みは
+# claude-code-base-repository 側の SessionStart hook (sidepane-session-start.sh)
+# が担う。fish 側は session 起動直前に fallback title だけセットし (hook 発火
+# までの数秒間 sidebar に何か表示するため)、起動後の cleanup は SessionEnd hook
+# (sidepane-session-end.sh + session-end-reset-pane-title.sh) に任せる。
+#
+# 旧版は fish 側で watcher process を spawn して jsonl を mtime + cwd で
+# ヒューリスティック探索していたが、orphan watcher の race が頻発したため廃止。
 function __claude_run
-    set -l watcher_pid
     if set -q TMUX; and set -q TMUX_PANE
         __claude_ensure_ai_pane_title_sync
-        set -l physical_pwd (__claude_physical_path "$PWD")
-        set -l started_at (date +%s)
         set -l fallback_title (__claude_fallback_title $argv)
-
-        # spawn 前に同 pane の旧 watcher を強制 kill する。
-        # __ai_pane_title_sync.fish の self-reload (mtime check + exec) が走ると
-        # 旧 watcher が adopt 後の started_at を引き継いで生き残るため、
-        # 「started_at 不一致で self-exit」だけでは race を完全に塞げない。
-        # pane option に登録した PID を tree kill するのが確実な始末方法。
-        for old_pid in (string split ' ' -- (tmux show-option -pqv -t "$TMUX_PANE" @ai_claude_watcher_pids 2>/dev/null))
-            test -n "$old_pid"; and __claude_kill_tree "$old_pid"
-        end
-        tmux set-option -p -t "$TMUX_PANE" @ai_claude_watcher_pids "" 2>/dev/null
-
-        __ai_pane_title_sync mark-claude "$TMUX_PANE" "$started_at" "$physical_pwd"
         __ai_pane_title_sync set-base "$TMUX_PANE" "$fallback_title" claude-fallback
-        set -l helper_path (__claude_ai_pane_title_sync_path)
-        if test -n "$helper_path"
-            command fish -c 'source "$argv[1]"; sleep 0.5; __ai_pane_title_sync claude-watch "$argv[2]" "$argv[3]" "$argv[4]"' "$helper_path" "$TMUX_PANE" "$physical_pwd" "$started_at" >/dev/null 2>&1 &
-            set watcher_pid $last_pid
-            tmux set-option -p -t "$TMUX_PANE" @ai_claude_watcher_pids "$watcher_pid" 2>/dev/null
-        end
     end
 
     command claude $argv
     set -l exit_code $status
 
-    if test -n "$watcher_pid"
-        __claude_kill_tree $watcher_pid
-    end
+    # SessionEnd hook (`prompt_input_exit|logout`) が走らないケース
+    # (Ctrl+C / kill / 異常終了 等) のために fallback で pane option を clear する。
+    # 二重実行は冪等 (set-option -pu は idempotent)。
     if set -q TMUX; and set -q TMUX_PANE
         __claude_ensure_ai_pane_title_sync
         __ai_pane_title_sync clear "$TMUX_PANE"
-        tmux set-option -p -t "$TMUX_PANE" @ai_claude_watcher_pids "" 2>/dev/null
     end
     return $exit_code
 end

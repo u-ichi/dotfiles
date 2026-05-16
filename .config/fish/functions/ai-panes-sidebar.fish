@@ -182,6 +182,42 @@ function __ai_codex_plan_lines --argument-names session_file max_line_chars max_
     end
 end
 
+# cwd を Claude Code 内部の projects/ ディレクトリ名規約に変換する。
+# 規約: 英数字とハイフン以外の全文字を `-` に置換する。
+# 例: `/Users/u1@u-kt.com/My Drive/foo` →
+#     `-Users-u1-u-kt-com-My-Drive-foo`
+# (`/`, `@`, `.`, space すべて `-` に変換、連続 `-` は merge しない)。
+function __ai_encode_cwd --argument-names cwd
+    test -n "$cwd"; or return 1
+    printf '%s\n' (string replace -ar '[^a-zA-Z0-9-]' '-' -- "$cwd")
+end
+
+# Claude session_id + cwd から `~/.claude/projects/<encoded>/<session_id>.jsonl`
+# を決定論的に組み立てる。session_id 不明 / 形式異常なら空を返す。
+function __ai_claude_session_path --argument-names cwd session_id
+    test -n "$cwd"; or return 1
+    test -n "$session_id"; or return 1
+    # UUID 形式 (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx) で受ける軽い sanity check
+    string match -qr '^[0-9a-f-]+$' -- "$session_id"; or return 1
+    set -l encoded (__ai_encode_cwd "$cwd")
+    test -n "$encoded"; or return 1
+    printf '%s/.claude/projects/%s/%s.jsonl\n' "$HOME" "$encoded" "$session_id"
+end
+
+# Codex session_id から `~/.codex/sessions/.../rollout-*-<session_id>.jsonl` を解決する。
+# Codex 側の jsonl path は `rollout-YYYY-MM-DDTHH-MM-SS-<uuid>.jsonl` 命名で、
+# 上位 directory が日付別 (`~/.codex/sessions/YYYY/MM/DD/`) のため、Claude と違い
+# session_id だけでは合成できない。当面は find による検索を行う。
+# 将来 Codex 側に SessionStart hook を追加して `transcript_path` を直接 pane option
+# に書く設計に切り替えたら、この関数は不要になる (= 直接 pane option から取れる)。
+function __ai_codex_session_path --argument-names session_id
+    test -n "$session_id"; or return 1
+    string match -qr '^[0-9a-f-]+$' -- "$session_id"; or return 1
+    set -l sessions_dir "$HOME/.codex/sessions"
+    test -d "$sessions_dir"; or return 1
+    command find "$sessions_dir" -type f -name "rollout-*-$session_id.jsonl" -mtime -7 2>/dev/null | command head -n 1
+end
+
 function __ai_claude_task_lines --argument-names session_file max_line_chars max_display_lines
     if not command -q jq
         return 1
@@ -472,8 +508,9 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
     # 関数のロジックを書き換えたら必ずこの数値を上げる (live writer pane は fish の
     # autoload で旧版を memory に抱え続けるため、bump → respawn でしか反映できない)。
     # v8 以降は writer 自身が state_version をファイルから読んで自己 re-exec する。
-    set -l state_version 14
+    set -l state_version 17
     while true
+        # ===== Section 1: 初期化 (loop 毎の状態リセット) =====
         set -l lines
         set -l line_targets
         set -l line_texts
@@ -485,17 +522,30 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
         set -l active_codex_session_file
         set -l active_claude_pane
         set -l active_claude_display
-        set -l active_claude_session_file
+        set -l active_claude_session_id
+        set -l active_claude_cwd
         set -l now_hm (date +%H:%M)
         set -l sidebar_window_id (tmux display-message -p -t "$TMUX_PANE" '#{window_id}' 2>/dev/null)
-        set -l raw (tmux list-panes -s -F '#{window_index}.#{pane_index}	#{pane_title}	#{@fixed_title}	#{@ai_base_title}	#{@ai_sidebar}	#{pane_current_path}	#{window_index}	#{@ai_display_index}	#{pane_current_command}	#{pane_id}	#{@ai_state}	#{@ai_state_since}	#{@ai_state_version}	#{pane_active}	#{window_id}	#{@ai_codex_started_at}	#{@ai_codex_session_file}	#{@ai_codex_cwd}	#{@ai_app}	#{@ai_claude_session_file}' 2>/dev/null)
+
+        # ===== Section 2: tmux pane 一覧の取得 =====
+        # tmux list-panes で全 pane の option を 1 回でまとめて取得する (毎 pane に
+        # show-option を打つより速い)。format string の field 数を変えたら、下の
+        # `string split -m N` (parts 配列の総数 - 1) も合わせて更新すること。
+        set -l raw (tmux list-panes -s -F '#{window_index}.#{pane_index}	#{pane_title}	#{@fixed_title}	#{@ai_base_title}	#{@ai_sidebar}	#{pane_current_path}	#{window_index}	#{@ai_display_index}	#{pane_current_command}	#{pane_id}	#{@ai_state}	#{@ai_state_since}	#{@ai_state_version}	#{pane_active}	#{window_id}	#{@ai_codex_started_at}	#{@ai_codex_session_file}	#{@ai_codex_cwd}	#{@ai_app}	#{@ai_claude_session_id}	#{@ai_claude_cwd}' 2>/dev/null)
         set -l writer_pane (tmux list-panes -s -F '#{pane_id}	#{@ai_sidebar}' 2>/dev/null | awk -F '\t' '$2 == "1" {print $1; exit}')
         set -l is_writer 0
         test "$TMUX_PANE" = "$writer_pane"; and set is_writer 1
 
+        # ===== Section 3: pane ごとの状態判定 + entries 構築 + active pane 識別 =====
+        # 各 pane を iterate して以下を実施:
+        #   - app 種別判定 (Codex / Claude / その他)
+        #   - 状態判定 (working / waiting / idle, title + capture-pane から)
+        #   - 状態遷移時刻 (@ai_state_since) の維持
+        #   - entries 配列に行データを push (後段の Section 4 で sort/format)
+        #   - sidebar と同じ window で active な Codex/Claude pane を active_* 変数に記録
         set -l entries
         for line in $raw
-            set -l parts (string split -m 19 \t -- $line)
+            set -l parts (string split -m 20 \t -- $line)
             set -l loc $parts[1]
             set -l title $parts[2]
             set -l fixed_title $parts[3]
@@ -513,7 +563,8 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             set -l codex_session_file $parts[17]
             set -l codex_cwd $parts[18]
             set -l ai_app $parts[19]
-            set -l claude_session_file $parts[20]
+            set -l claude_session_id $parts[20]
+            set -l claude_cwd $parts[21]
 
             test "$loc" = (tmux display-message -p -t "$TMUX_PANE" '#{window_index}.#{pane_index}' 2>/dev/null); and continue
             test "$is_sidebar" = 1; and continue
@@ -662,11 +713,21 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
                 if test "$pane_active" = 1
                     set active_claude_pane "$pane_id"
                     set active_claude_display "$display"
-                    set active_claude_session_file "$claude_session_file"
+                    # Claude Code が内部で sidechain / subagent session を発行した時にも
+                    # SessionStart hook が呼ばれて pane option が上書きされうる。
+                    # pane の cwd と option の cwd が一致する時のみ採用することで、
+                    # 「別 project の sidechain が pane に書いた」ケースを skip する。
+                    if test -n "$claude_cwd"; and test "$claude_cwd" = "$path"
+                        set active_claude_session_id "$claude_session_id"
+                        set active_claude_cwd "$claude_cwd"
+                    end
                 end
             end
         end
 
+        # ===== Section 4: pane 一覧の sort + 行レンダリング =====
+        # entries を bucket (working → waiting → idle) と sort_key 順に並べ、
+        # 各行を pane 幅で trim + 色付けして $lines に append する。
         # 全角文字を含むタイトルでも sidebar 内で折り返さないよう pane 幅に合わせて切る。
         set -l pane_width (tmux display-message -p -t "$TMUX_PANE" '#{pane_width}' 2>/dev/null)
         set -l pane_height (tmux display-message -p -t "$TMUX_PANE" '#{pane_height}' 2>/dev/null)
@@ -703,6 +764,10 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             end
         end
 
+        # ===== Section 5: active Codex pane の plan tree 描画 =====
+        # Codex は session_id を hook で受け取る経路がまだないため、
+        # mtime + cwd ヒューリスティックの __ai_codex_find_session_file で jsonl を解決する。
+        # 解決した jsonl path は @ai_codex_session_file に cache する (次回 loop で再利用)。
         if test -n "$active_codex_pane"
             set -l plan_session_file
             if string match -qr '^[0-9]+$' -- "$active_codex_started_at"
@@ -743,27 +808,35 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             end
         end
 
-        # active Claude pane の TaskList を Codex plan tree と同じ枠で表示する。
-        if test -n "$active_claude_pane"; and test -n "$active_claude_session_file"; and test -f "$active_claude_session_file"
-            if not string match -qr '^[0-9]+$' -- "$pane_height"
-                set pane_height 30
-            end
-            set -l existing_lines (count $lines)
-            # pane 高さの範囲内で全 task を表示 (上限 cap 撤廃)。
-            set -l max_task_lines (math "$pane_height - $existing_lines - 2")
-            if test "$max_task_lines" -lt 5
-                set max_task_lines 5
-            end
-            set -l task_lines (__ai_claude_task_lines "$active_claude_session_file" "$max_line_chars" "$max_task_lines")
-            if test (count $task_lines) -gt 0
-                set -a lines ""
-                set -a lines (string shorten -m $max_line_chars -- "$active_claude_display")
-                for task_line in $task_lines
-                    set -a lines " "$task_line
+        # ===== Section 6: active Claude pane の task tree 描画 =====
+        # Claude は SessionStart hook (base-repo: sidepane-session-start.sh) が
+        # @ai_claude_session_id + @ai_claude_cwd を pane option に直接書くため、
+        # ここでは session_id + cwd から jsonl path を決定論的に組み立てるだけ
+        # (旧版は mtime + cwd ヒューリスティックの watcher 経由で race していた)。
+        if test -n "$active_claude_pane"; and test -n "$active_claude_session_id"; and test -n "$active_claude_cwd"
+            set -l active_claude_session_file (__ai_claude_session_path "$active_claude_cwd" "$active_claude_session_id")
+            if test -n "$active_claude_session_file"; and test -f "$active_claude_session_file"
+                if not string match -qr '^[0-9]+$' -- "$pane_height"
+                    set pane_height 30
+                end
+                set -l existing_lines (count $lines)
+                # pane 高さの範囲内で全 task を表示 (上限 cap 撤廃)。
+                set -l max_task_lines (math "$pane_height - $existing_lines - 2")
+                if test "$max_task_lines" -lt 5
+                    set max_task_lines 5
+                end
+                set -l task_lines (__ai_claude_task_lines "$active_claude_session_file" "$max_line_chars" "$max_task_lines")
+                if test (count $task_lines) -gt 0
+                    set -a lines ""
+                    set -a lines (string shorten -m $max_line_chars -- "$active_claude_display")
+                    for task_line in $task_lines
+                        set -a lines " "$task_line
+                    end
                 end
             end
         end
 
+        # ===== Section 7: click target 登録 (行クリックで pane 切替) =====
         set -l line_no 1
         set -l target_count (count $line_targets)
         if test "$target_count" -gt 0
@@ -786,6 +859,8 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
         end
         set last_target_count (count $line_targets)
 
+        # ===== Section 8: 差分検知 + 出力 =====
+        # 直前の出力と比較し、変化があれば画面 clear + 再 print する (flicker 抑制)。
         set -l output (printf '%s\n' $lines)
         if test "$output" != "$last_output"
             printf '\033[2J\033[H'
@@ -793,6 +868,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             set last_output "$output"
         end
 
+        # ===== Section 9: state_version self-check で自己 re-exec =====
         # state_version self-check: ファイル上の state_version が bump されたら自己 re-exec。
         # tmux event (after-new-session 等) を待たずに編集を反映するための fallback。
         # ensure-ai-sidebars.sh が次に走った時 (新 window 等) には @ai_sidebar_version が

@@ -27,7 +27,7 @@ function __ai_pane_title_sync_clear --argument-names pane_id
     tmux set-option -p -t "$pane_id" @ai_codex_session_file "" 2>/dev/null
     tmux set-option -p -t "$pane_id" @ai_claude_started_at "" 2>/dev/null
     tmux set-option -p -t "$pane_id" @ai_claude_cwd "" 2>/dev/null
-    tmux set-option -p -t "$pane_id" @ai_claude_session_file "" 2>/dev/null
+    tmux set-option -p -t "$pane_id" @ai_claude_session_id "" 2>/dev/null
 end
 
 function __ai_pane_title_sync_codex_session_start_epoch --argument-names file
@@ -134,108 +134,12 @@ function __ai_pane_title_sync_codex_watch --argument-names pane_id cwd started_a
     end
 end
 
-function __ai_pane_title_sync_claude_session_mtime --argument-names file
-    command stat -f %m "$file" 2>/dev/null; or command stat -c %Y "$file" 2>/dev/null
-end
-
-function __ai_pane_title_sync_claude_find_session_file --argument-names cwd started_at
-    if not command -q jq
-        return 1
-    end
-    string match -qr '^[0-9]+$' -- "$started_at"; or return 1
-
-    set -l projects_dir "$HOME/.claude/projects"
-    test -d "$projects_dir"; or return 1
-
-    set -l best_file
-    set -l best_mtime 0
-    for file in (command find "$projects_dir" -type f -name '*.jsonl' -mtime -3 2>/dev/null)
-        set -l mtime (__ai_pane_title_sync_claude_session_mtime "$file")
-        string match -qr '^[0-9]+$' -- "$mtime"; or continue
-        test "$mtime" -ge (math "$started_at - 5"); or continue
-        test "$mtime" -ge "$best_mtime"; or continue
-
-        set -l session_cwd (command head -n 20 "$file" | command jq -r 'select(.cwd != null) | .cwd' 2>/dev/null | command head -n 1)
-        test "$session_cwd" = "$cwd"; or continue
-
-        set best_mtime "$mtime"
-        set best_file "$file"
-    end
-
-    test -n "$best_file"; and printf '%s\n' "$best_file"
-end
-
-function __ai_pane_title_sync_claude_slug --argument-names session_file
-    command -q jq; or return 1
-    test -f "$session_file"; or return 1
-
-    set -l slug (command tail -n 200 "$session_file" | command jq -r 'select(.slug != null) | .slug' 2>/dev/null | command tail -n 1)
-    __ai_pane_title_sync_clean "$slug"
-end
-
-function __ai_pane_title_sync_claude_watch --argument-names pane_id cwd started_at
-    # NOTE: 関数定義ファイル更新を検知したら新版で自己 exec する (live 反映機構)。
-    # fish の autoload キャッシュも source 済みプロセスも reload しないため、
-    # watch loop が旧版で動き続ける問題を防ぐ。
-    set -l function_path "$HOME/.config/fish/functions/__ai_pane_title_sync.fish"
-    # -L (stat(2) = symlink follow) 必須: BSD stat (macOS) default は lstat(2) で
-    # symlink 自体の mtime しか返さない。GNU stat (Linux) は default 辿るが -L も同義。
-    set -l watch_mtime (command stat -L -f %m "$function_path" 2>/dev/null; or command stat -L -c %Y "$function_path" 2>/dev/null)
-    set -l last_title ""
-    while true
-        if test -n "$watch_mtime"
-            set -l current_mtime (command stat -L -f %m "$function_path" 2>/dev/null; or command stat -L -c %Y "$function_path" 2>/dev/null)
-            if test -n "$current_mtime"; and test "$current_mtime" != "$watch_mtime"
-                exec command fish -c 'source $argv[1]; __ai_pane_title_sync claude-watch $argv[2] $argv[3] $argv[4]' "$function_path" "$pane_id" "$cwd" "$started_at"
-            end
-        end
-
-        # watcher は spawn 時の (pane_id, started_at) ペアに 1:1 で縛る。
-        # 同 pane で別 claude セッションが起動した場合 (mark-claude で started_at 更新) や
-        # claude が exit した場合 (clear で started_at が空) には、新セッション用の
-        # watcher が claude.fish 側で別途 spawn されているので自身は exit する。
-        # 旧設計は started_at を adopt して継続していたが、cwd は spawn 時固定のため
-        # 「新 started_at × 旧 cwd」で find_session_file を続け、別 project の jsonl を
-        # 拾って pane option を上書きする race を起こしていた (orphan watcher が
-        # PID=1 reparent 後も生き残り、新 watcher が書いた cfile を 2 秒間隔で奪う)。
-        set -l current_started_at (tmux show-option -pqv -t "$pane_id" @ai_claude_started_at 2>/dev/null)
-        if test "$current_started_at" != "$started_at"
-            exit 0
-        end
-
-        set -l session_file (tmux show-option -pqv -t "$pane_id" @ai_claude_session_file 2>/dev/null)
-        # 毎ループ最新の候補を find する。session_file 未設定なら採用、設定済みでも
-        # 候補の mtime が現 session_file より新しければ切り替える。
-        # find_session_file 自体が「mtime ≥ started_at - 5」を必須条件にしているため、
-        # 古い jsonl は候補に入らず、新 jsonl があれば mtime 比較で必ず上書きされる。
-        # よって cff3f05 で導入した別途の mtime invalidate (ブロックで強制クリア) は
-        # ここでは不要 (新ロジックで覆われる)。
-        set -l candidate (__ai_pane_title_sync_claude_find_session_file "$cwd" "$started_at")
-        if test -n "$candidate"
-            if test -z "$session_file"; or not test -f "$session_file"
-                set session_file "$candidate"
-                tmux set-option -p -t "$pane_id" @ai_claude_session_file "$session_file" 2>/dev/null
-            else if test "$candidate" != "$session_file"
-                set -l candidate_mtime (__ai_pane_title_sync_claude_session_mtime "$candidate")
-                set -l current_mtime (__ai_pane_title_sync_claude_session_mtime "$session_file")
-                if string match -qr '^[0-9]+$' -- "$candidate_mtime"; and string match -qr '^[0-9]+$' -- "$current_mtime"; and test "$candidate_mtime" -gt "$current_mtime"
-                    set session_file "$candidate"
-                    tmux set-option -p -t "$pane_id" @ai_claude_session_file "$session_file" 2>/dev/null
-                end
-            end
-        end
-
-        if test -n "$session_file"
-            set -l title (__ai_pane_title_sync_claude_slug "$session_file")
-            if test -n "$title"; and test "$title" != "$last_title"
-                __ai_pane_title_sync_set_base "$pane_id" "$title" claude-slug
-                set last_title "$title"
-            end
-        end
-
-        sleep 2
-    end
-end
+# claude 側の watcher 関数群は廃止。Claude Code 本体の SessionStart hook
+# (base-repo の `home/scripts/claude/sidepane-session-start.sh`) が pane option
+# (@ai_claude_session_id / @ai_claude_cwd / @ai_claude_started_at) を直接書く。
+# sidebar renderer は session_id + cwd から jsonl path を決定論的に組み立て、
+# slug 等は renderer 内で読み出すため、ここでは watcher process / slug 取得関数も
+# 不要になった。codex 側は SessionStart hook 未対応のため当面 watcher 維持。
 
 function __ai_pane_title_sync --argument-names command pane_id
     switch "$command"
@@ -257,16 +161,8 @@ function __ai_pane_title_sync --argument-names command pane_id
             tmux set-option -p -t "$pane_id" @ai_codex_started_at "$argv[3]" 2>/dev/null
             tmux set-option -p -t "$pane_id" @ai_codex_cwd "$argv[4]" 2>/dev/null
             tmux set-option -p -t "$pane_id" @ai_codex_session_file "" 2>/dev/null
-        case mark-claude
-            test -n "$pane_id"; or return 1
-            tmux set-option -p -t "$pane_id" @ai_app claude 2>/dev/null
-            tmux set-option -p -t "$pane_id" @ai_claude_started_at "$argv[3]" 2>/dev/null
-            tmux set-option -p -t "$pane_id" @ai_claude_cwd "$argv[4]" 2>/dev/null
-            tmux set-option -p -t "$pane_id" @ai_claude_session_file "" 2>/dev/null
         case codex-watch
             __ai_pane_title_sync_codex_watch "$pane_id" "$argv[3]" "$argv[4]" "$argv[5]"
-        case claude-watch
-            __ai_pane_title_sync_claude_watch "$pane_id" "$argv[3]" "$argv[4]"
         case '*'
             echo "__ai_pane_title_sync: unknown command '$command'" >&2
             return 1

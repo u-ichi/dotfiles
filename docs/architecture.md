@@ -118,13 +118,24 @@ Task 行は `完了数/総数 Task 名` を含むツリーの親行として出�
 完了 Task には `✓`、未着手 Task には `-` を付ける。sidebar 上では `Task:` / `SubTask:`
 prefix を消し、`Goal:` 行は sidebar 幅に合わせて短縮表示する。Goal がない plan では
 Task 一覧から表示する。
-active Claude pane の場合も同じ枠で sidebar に TaskList ツリーを出す。`__ai_pane_title_sync claude-watch`
-が記録した `@ai_claude_session_file` (`~/.claude/projects/.../<session-id>.jsonl`) を読み、
+active Claude pane の場合も同じ枠で sidebar に TaskList ツリーを出す。Claude Code 本体の
+SessionStart hook (claude-code-base-repository の
+`home/scripts/claude/sidepane-session-start.sh`) が tmux pane option
+(`@ai_claude_session_id` / `@ai_claude_cwd` / `@ai_claude_started_at`) を直接書き、sidebar は
+これらから `~/.claude/projects/<encoded-cwd>/<session_id>.jsonl` を決定論的に組み立てて読む。
+encoded-cwd は cwd の英数字とハイフン以外を `-` に置換した形式 (`/`, `@`, `.`, space すべて `-`)。
 `TaskCreate` / `TaskUpdate` tool event を順次再生して最新タスク状態を復元する。最初の
 `TaskCreate` の `metadata.goal` を `Goal:` 行に、`metadata.parentTaskId` で親子関係を
 組み立て、`status` (pending/in_progress/completed) を `-` / `>` / `✓` マーカーに割り当てる。
 `status=deleted` のタスクは出さない。Codex plan と同じく Task 行は `完了子数/総数 subject` で出し、
 親なしタスク (parentTaskId なし) を親行、それ以外を子行 (2 スペースインデント) として描画する。
+
+旧版 (〜2026-05-16) は `claude.fish` が watcher process を spawn して `mtime + cwd`
+ヒューリスティックで jsonl を探索していたが、同 cwd 複数セッションでの誤マッチや
+PID=1 reparent 後の orphan watcher による pane option 上書き race が頻発したため廃止。
+SessionStart hook 経路に置き換え、`@ai_claude_session_file` (path) と
+`@ai_claude_watcher_pids` (PID リスト) は撤廃した。Codex 側はまだ SessionStart hook を
+登録していないため、`__ai_pane_title_sync codex-watch` 経由の watcher 経路を維持する。
 `@ai_display_index` は `after-split-window` / `after-kill-pane` hook で再採番する。通常 pane が
 全て閉じられて sidebar だけが残った window は `after-kill-pane` hook で
 `cleanup-ai-sidebars.sh` が sidebar を閉じる。sidebar 作成は hook からは行わず、layout 変更は
