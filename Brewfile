@@ -1,9 +1,10 @@
 cask_args appdir: "/Applications"
 
-# === 非公式 tap (u-ichi/homebrew-tap) ===
-# Homebrew 公式に無い macOS アプリ用の個人 tap
+# === 非公式 tap ===
+# Homebrew 公式に無い macOS アプリ用の tap
 # cask の追加・更新は dotfiles 側の pkg-add / cask-update skill で行う
 tap 'u-ichi/tap'
+tap 'manaflow-ai/cmux'
 
 # === CLI: クラウド・インフラ ===
 brew 'awscli'
@@ -70,6 +71,7 @@ cask 'zoom'
 # === GUI: AI ===
 cask 'claude'
 cask 'chatgpt'
+cask 'cmux'
 
 # === GUI: 生産性 ===
 cask 'google-drive'
