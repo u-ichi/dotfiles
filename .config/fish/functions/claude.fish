@@ -68,10 +68,17 @@ function __claude_run
     command claude $argv
     set -l exit_code $status
 
-    # SessionEnd hook (`prompt_input_exit|logout`) が走らないケース
-    # (Ctrl+C / kill / 異常終了 等) のために fallback で pane option を clear する。
-    # 二重実行は冪等 (set-option -pu は idempotent)。
+    # 終了時の pane title リセット。
+    # SessionEnd hook (session-end-reset-pane-title.sh) は matcher を
+    # `prompt_input_exit|logout` に絞っているが、これは非対話モード
+    # (`claude --print`) の入力終端用 reason。対話セッションを Ctrl+D / `/exit`
+    # で抜ける通常終了は reason が `other` (`/exit` では hook 自体が発火しない:
+    # anthropics/claude-code#17885) のため matcher にマッチせず、hook 経由の
+    # リセットが効かない。codex 側 (__codex_reset_pane_title) と同様に wrapper で
+    # pane title を pwd basename に戻し、pane option も clear する。
+    # hook と二重に走っても冪等 (select-pane -T / set-option -p は idempotent)。
     if set -q TMUX; and set -q TMUX_PANE
+        tmux select-pane -t "$TMUX_PANE" -T (basename "$PWD") 2>/dev/null
         __claude_ensure_ai_pane_title_sync
         __ai_pane_title_sync clear "$TMUX_PANE"
     end
