@@ -10,6 +10,16 @@ source "$SCRIPT_DIR/lib/defaults.sh"
 source "$SCRIPT_DIR/lib/docker.sh"
 source "$SCRIPT_DIR/lib/aws.sh"
 source "$SCRIPT_DIR/lib/terraform.sh"
+source "$SCRIPT_DIR/lib/hermes.sh"
+
+MODE="${1:-all}"
+
+if [ "$MODE" = "hermes" ]; then
+  echo "=== Hermes Agent セットアップ ==="
+  ensure_hermes
+  echo "完了しました"
+  exit 0
+fi
 
 echo "=== dotfiles 初回セットアップ ==="
 echo ""
