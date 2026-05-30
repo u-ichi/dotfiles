@@ -7,6 +7,17 @@ font-family = Moralerspace Neon
 font-size = 14
 #font-thicken = true
 
+# cmux 対策: cmux は CJK 範囲を内蔵フォント (Hiragino/PingFang) へ強制マッピング
+# する font-codepoint-map 自動注入を持ち、font-family が CJK を内蔵していても
+# 上書きするため日本語と英数字でフォントが食い違う (manaflow-ai/cmux #1793)。
+# CJK 範囲を明示的に Moralerspace Neon へ固定して自動注入を抑止する。
+# Ghostty 単体には影響しない (元々 font-family で CJK もカバーされるため)。
+font-codepoint-map = U+3000-U+30FF=Moralerspace Neon
+font-codepoint-map = U+3400-U+4DBF=Moralerspace Neon
+font-codepoint-map = U+4E00-U+9FFF=Moralerspace Neon
+font-codepoint-map = U+F900-U+FAFF=Moralerspace Neon
+font-codepoint-map = U+FF00-U+FFEF=Moralerspace Neon
+
 # === テーマ（システムのライト/ダークに自動追従） ===
 theme = light:Catppuccin Latte,dark:Catppuccin Mocha
 
