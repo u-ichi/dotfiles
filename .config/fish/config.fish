@@ -14,6 +14,18 @@ set -gx NODE_EXTRA_CA_CERTS "$HOME/Library/Application Support/mkcert/rootCA.pem
 if status is-interactive
     # bobthefish: git リポジトリ内ではプロジェクトルートより上の親パスを非表示
     set -g theme_show_project_parent no
+
+    # pane / 端末タイトル: bobthefish 既定の fish_title は prompt_pwd
+    # (~/L/C/.../dotfiles のように親ディレクトリを 1 文字へ省略) を OSC タイトルに出すため、
+    # tmux の window タブや端末タイトルに無駄な省略パスが並ぶ。カレントの basename のみを
+    # 出して簡潔にする (window 名自体は tmux の rename-windows.sh が別途管理)。
+    function fish_title
+        if test "$PWD" = "$HOME"
+            echo '~'
+        else
+            basename -- "$PWD"
+        end
+    end
 end
 
 
