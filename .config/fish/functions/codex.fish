@@ -132,6 +132,7 @@ function __codex_set_pane_base_title
 
     __codex_ensure_ai_pane_title_sync
     set -l path (__codex_target_path $argv)
+    tmux set-option -p -t "$TMUX_PANE" @fixed_title "" 2>/dev/null
     __ai_pane_title_sync set-base "$TMUX_PANE" (basename "$path") codex-fallback
 end
 

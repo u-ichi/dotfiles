@@ -155,6 +155,19 @@ if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; test
   exit 1
 fi
 
+new_project_dir="$TEST_HOME/new-project"
+mkdir -p "$new_project_dir"
+normal_pane="$(tmux_i list-panes -t 'ai-sidebar-test:1' -F '#{pane_id}	#{@ai_sidebar}' | awk -F '\t' '$2 != "1" { print $1; exit }')"
+tmux_i set-option -p -t "$normal_pane" @fixed_title "old-session-title"
+tmux_i set-option -p -t "$normal_pane" @ai_base_title "old-base-title"
+TMUX="$SOCKET,0,0" TMUX_PANE="$normal_pane" fish -c "source '$SCRIPT_DIR/../fish/functions/codex.fish'; __codex_set_pane_base_title -C '$new_project_dir'"
+fixed_title="$(tmux_i show-option -pqv -t "$normal_pane" @fixed_title)"
+base_title="$(tmux_i show-option -pqv -t "$normal_pane" @ai_base_title)"
+if [ -n "$fixed_title" ] || [ "$base_title" != "new-project" ]; then
+  echo "ERROR: Codex pane title startup cleanup is invalid (fixed='$fixed_title', base='$base_title')" >&2
+  exit 1
+fi
+
 if command -v jq >/dev/null 2>&1; then
   plan_file="$SOCKET_DIR/codex-plan.jsonl"
   printf '%s\n' '{"name":"update_plan","payload":{"arguments":"{\"explanation\":\"Goal: tmux sidebar に Goal を表示する\",\"plan\":[{\"step\":\"Task: 古い作業\",\"status\":\"completed\"},{\"step\":\"SubTask: 古い確認\",\"status\":\"completed\"},{\"step\":\"Task: plan 表示を直す\",\"status\":\"in_progress\"},{\"step\":\"SubTask: plan を読む\",\"status\":\"completed\"},{\"step\":\"SubTask: Goal 行を出す\",\"status\":\"in_progress\"},{\"step\":\"SubTask: live 表示を確認する\",\"status\":\"pending\"}]}"}}' > "$plan_file"
