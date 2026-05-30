@@ -1,14 +1,14 @@
 ---
 id: 4
 title: "Hermes Agent の X Search を CLI で使えるようにする"
-status: 進行中
+status: 完了
 notion_url: "https://www.notion.so/3630921ecd0a81b39313e14fa9677645"
 notion_id: "3630921e-cd0a-81b3-9313-e14fa9677645"
 parent_notion_url: ""
 tags: ["dotfiles", "hermes", "x-search", "cli"]
 assignee: ""
 created: 2026-05-17
-updated: 2026-05-18
+updated: 2026-05-30
 ---
 
 # 04: Hermes Agent の X Search を CLI で使えるようにする
@@ -90,6 +90,18 @@ Hermes Agent の `x_search` を `hermes -z` 経由で日常的に呼び出せる
 - `command -v hermes && hermes --version`、`command -v uv && uv --version`、`command -v ffmpeg && ffmpeg -version`、`fish --no-execute .config/fish/functions/x-search.fish`、`./lint.sh` が通過した。
 - Playwright Chromium の system dependency setup と TUI npm install は installer 上 warning が出た。今回の X Search CLI 目的には必須ではないため、必要になった時の追加確認事項として残す。
 - `brew bundle check --file=Brewfile --verbose` は既存 cask `session-manager-plugin` の未充足で失敗した。今回追加した `ffmpeg` は `brew list --formula ffmpeg` で導入済みを確認した。
+
+### 2026-05-30
+
+- 完了。成果物は commit `156254b` (✨ [untested] hermes: xAI OAuth 経由の x-search CLI を追加) で push 済、Lint CI run 26675880286 success。
+- ゴール条件 6 件すべて達成を再検証:
+  - `test -f docs/hermes-x-search.md` → OK
+  - `ensure_hermes` 参照: `lib/hermes.sh:4`, `install.sh:13` (source + L17 MODE 分岐 で呼び出し), `update.sh:12` (source + L16 MODE 分岐 で呼び出し)
+  - `hermes --version` → `Hermes Agent v0.14.0 (2026.5.16)` (`/Users/u1/.local/bin/hermes`)
+  - `fish --no-execute .config/fish/functions/x-search.fish` → 構文 OK (silent)
+  - `links.conf` に `x-search.fish` シンボリックリンク行あり (commit 156254b で追加)
+  - `./lint.sh` → 本セッションで Lint CI run 26675880286 / 26676670383 ともに success
+- backlog file を `docs/backlog/done/` へ移動。
 
 ## 成果物
 
