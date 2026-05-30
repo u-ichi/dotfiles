@@ -5,7 +5,7 @@
 # 型: -bool, -int, -float, -string
 DEFAULTS=(
   # Google Drive: フォルダ名を英語（My Drive）に固定する
-  # ローカライズされた名前（マイドライブ）だと symlink のパスが壊れるため
+  # ローカライズされた名前（マイドライブ）だと repo パスの扱いが壊れるため
   "com.google.drivefs.settings DisableLocalizedVirtualFolders -bool true"
 )
 

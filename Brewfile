@@ -5,6 +5,7 @@ cask_args appdir: "/Applications"
 # cask の追加・更新は dotfiles 側の pkg-add / cask-update skill で行う
 tap 'u-ichi/tap'
 tap 'manaflow-ai/cmux'
+tap 'terraform-linters/tap'
 
 # === CLI: クラウド・インフラ ===
 brew 'awscli'
@@ -13,7 +14,6 @@ brew 'cloudflared'
 brew 'gitleaks'
 brew 'infracost'
 brew 'tfenv'
-brew 'tflint'
 brew 'trivy'
 
 # === CLI: 開発ツール ===
@@ -63,6 +63,7 @@ cask 'github'
 cask 'session-manager-plugin'
 cask 'visual-studio-code'
 cask 'gcloud-cli'
+cask 'terraform-linters/tap/tflint'
 
 # === GUI: ブラウザ・コミュニケーション ===
 cask 'google-chrome'

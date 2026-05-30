@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 初回セットアップスクリプト（symlink 作成 + Claude Code インストール）
+# dotfiles 同期スクリプト（初回セットアップ + 日常更新）
 
 set -euo pipefail
 
@@ -16,6 +16,36 @@ source "$SCRIPT_DIR/lib/python.sh"
 
 MODE="${1:-all}"
 
+update_npm_globals() {
+  local npmfile="$SCRIPT_DIR/Npmfile"
+  local npm_cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/npm"
+
+  if [ -f "$npmfile" ] && command -v npm &>/dev/null; then
+    echo "--- npm グローバルパッケージ ---"
+    mkdir -p "$npm_cache_dir"
+    while IFS= read -r pkg || [ -n "$pkg" ]; do
+      [[ -z "$pkg" || "$pkg" =~ ^# ]] && continue
+      echo "更新: $pkg"
+      npm --cache "$npm_cache_dir" install -g "$pkg@latest"
+    done < "$npmfile"
+    echo ""
+  fi
+}
+
+sync_homebrew() {
+  if ! command -v brew &>/dev/null; then
+    echo "エラー: Homebrew がインストールされていません"
+    echo "https://brew.sh/ からインストールしてください"
+    exit 1
+  fi
+
+  echo "--- Homebrew ---"
+  brew update
+  brew bundle --file="$SCRIPT_DIR/Brewfile"
+  brew cleanup
+  echo ""
+}
+
 if [ "$MODE" = "hermes" ]; then
   echo "=== Hermes Agent セットアップ ==="
   ensure_hermes
@@ -24,8 +54,8 @@ if [ "$MODE" = "hermes" ]; then
 fi
 
 if [ "$MODE" = "gws" ]; then
-  echo "=== Google Workspace CLI セットアップ ==="
-  ensure_gws
+  echo "=== Google Workspace CLI 同期 ==="
+  update_gws
   echo "完了しました"
   exit 0
 fi
@@ -36,7 +66,19 @@ if [ "$MODE" = "python" ]; then
   exit 0
 fi
 
-echo "=== dotfiles 初回セットアップ ==="
+if [ "$MODE" = "npm" ]; then
+  update_npm_globals
+  echo "完了しました"
+  exit 0
+fi
+
+if [ "$MODE" != "all" ]; then
+  echo "エラー: 未知の MODE です: $MODE"
+  echo "利用可能: all, hermes, gws, python, npm"
+  exit 1
+fi
+
+echo "=== dotfiles 同期 ==="
 echo ""
 
 # === ファイル権限 ===
@@ -45,21 +87,12 @@ fix_permissions
 echo "完了"
 echo ""
 
-# === Homebrew パッケージ ===
-echo "--- Homebrew ---"
-if command -v brew &>/dev/null; then
-  echo "Brewfile からパッケージをインストールします"
-  brew bundle --file="$SCRIPT_DIR/Brewfile"
-else
-  echo "エラー: Homebrew がインストールされていません"
-  echo "https://brew.sh/ からインストールしてください"
-  exit 1
-fi
-echo ""
+# === Homebrew ===
+sync_homebrew
 
-# === symlink ===
-echo "--- symlink ---"
-sync_links
+# === 設定ファイルコピー ===
+echo "--- 設定ファイルコピー ---"
+sync_files
 echo ""
 
 # === Git ローカル設定 ===
@@ -115,6 +148,9 @@ echo "--- Terraform ---"
 ensure_terraform_latest
 echo ""
 
+# === npm グローバルパッケージ ===
+update_npm_globals
+
 # === Python automation packages ===
 ensure_python_tools
 
@@ -142,4 +178,4 @@ ensure_docker_autostart
 echo ""
 
 echo "完了しました"
-echo "以降は update.sh で symlink とパッケージを更新してください"
+echo "以降も ./install.sh で設定ファイルコピーとパッケージを同期してください"

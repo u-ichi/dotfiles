@@ -7,7 +7,9 @@ errors=0
 
 # git 管理下のファイルを拡張子で抽出する
 git_files_by_ext() {
-  git -C "$SCRIPT_DIR" ls-files -z | tr '\0' '\n' | grep -E "\.$1$" || true
+  git -C "$SCRIPT_DIR" ls-files -z | tr '\0' '\n' | grep -E "\.$1$" | while IFS= read -r f; do
+    [ -f "$SCRIPT_DIR/$f" ] && printf '%s\n' "$f"
+  done || true
 }
 
 # === ShellCheck (Bash) ===

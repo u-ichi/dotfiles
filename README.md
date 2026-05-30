@@ -12,19 +12,17 @@ cd dotfiles
 ./install.sh
 ```
 
-`install.sh` が以下を一括で行う:
+`install.sh` が初回セットアップと日常更新を一括で行う:
 
-1. Brewfile からパッケージをインストール
-2. 設定ファイルの symlink を作成
+1. Brewfile からパッケージをインストール / 更新
+2. 設定ファイルを `~/` 配下へコピー
 3. Git のユーザー情報を対話的に設定（`~/.config/git/config.local`）
-4. Claude Code / mkcert / Fisher をインストール
+4. Claude Code / mkcert / Fisher を必要に応じてインストール
 5. macOS defaults を適用
-
-日常の更新は `./update.sh` を実行する。
 
 ## 内部構成
 
-ディレクトリ構成、symlink 同期方式など内部設計の詳細は
+ディレクトリ構成、設定ファイルコピー方式など内部設計の詳細は
 [`docs/architecture.md`](docs/architecture.md) を参照。
 
 ## セキュリティに関する注意

@@ -7,12 +7,11 @@
 
 ```
 .
-├── install.sh                  # 初回セットアップ (Brewfile + symlink + Claude Code 等)
-├── update.sh                   # 日常更新 (symlink 同期 + brew/npm 更新)
+├── install.sh                  # 初回セットアップ / 日常更新 (Brewfile + 設定ファイルコピー + brew/npm 更新)
 ├── lint.sh                     # ShellCheck / fish / taplo / json チェック
-├── links.conf                  # symlink 定義 (ソース → リンク先の宣言)
+├── links.conf                  # コピー定義 (ソース → コピー先の宣言)
 ├── lib/
-│   ├── symlink.sh              #   symlink 作成関数 (links.conf を読み込む)
+│   ├── symlink.sh              #   設定ファイルコピー関数 (links.conf を読み込む)
 │   ├── docker.sh               #   Docker Desktop 自動起動の有効化
 │   ├── defaults.sh             #   macOS defaults の適用
 │   ├── aws.sh                  #   AWS config を config.d パターンで組み立て
@@ -48,13 +47,14 @@
 
 ## 同期方式
 
-設定ファイルはこのリポジトリからホームディレクトリへ **symlink** する方式（Stow 等は不使用）。
-`links.conf` にソースとリンク先のペアを宣言し、`lib/symlink.sh` の `sync_links` が読み込む。
+設定ファイルはこのリポジトリからホームディレクトリへ **コピー** する方式（Stow 等は不使用）。
+`links.conf` にソースとコピー先のペアを宣言し、`lib/symlink.sh` の `sync_files` が読み込む。
+既存の symlink 管理から移行するため、`lib/symlink.sh` というファイル名は互換のため残している。
 
 | 対象 | 方式 | 理由 |
 |------|------|------|
-| 一般的な設定ファイル | symlink (`links.conf`) | 編集が即反映され、リポジトリと実環境の乖離が起きない |
-| Fish Shell | 個別ファイル単位の symlink | `fisher` 等が自動生成するファイル (`fish_variables`, テーマ系) の repo 混入を防ぐ |
+| 一般的な設定ファイル | コピー (`links.conf`) | `~/` 配下に実体を置き、リポジトリへの symlink 依存をなくす |
+| Fish Shell | 個別ファイル単位のコピー | `fisher` 等が自動生成するファイル (`fish_variables`, テーマ系) の repo 混入を防ぐ |
 | Fisher プラグイン | `fish_plugins` のみ追跡 + `fisher update` で復元 | プラグイン本体は upstream で管理されるため、リスト管理で十分 |
 | AWS config | `config.d/` のスニペットを連結して `~/.aws/config` に書き出す | プロファイルごとに分割管理しつつ、AWS CLI が読む単一ファイルを提供 |
 
@@ -66,8 +66,7 @@ dotfiles 側では扱わない。詳細は claude.codex の `install.sh` と `do
 
 | スクリプト | 役割 |
 |-----------|------|
-| `install.sh` | 初回セットアップ。Brewfile 適用、symlink 作成、Git ローカル設定の対話的入力、Claude Code / mkcert / Fisher / Terraform / Python tools のインストール、macOS defaults 適用。第 1 引数で MODE (`hermes` / `gws` / `python`) を指定するとそのモジュールだけ再実行する |
-| `update.sh` | 日常運用。symlink 再同期、AWS 設定の再展開、`brew bundle` + `brew upgrade`、Terraform 最新化、Npmfile からの `npm i -g`、Pythonfile を uv で同期。第 1 引数で MODE (`hermes` / `gws` / `python` / `npm`) を指定するとそのモジュールだけ再実行する |
+| `install.sh` | 初回セットアップと日常更新の単一エントリポイント。Brewfile 適用 / 更新、設定ファイルコピー、Git ローカル設定の対話的入力、AWS 設定の再展開、Claude Code / mkcert / Fisher / Terraform / npm / Python tools の同期、macOS defaults 適用を行う。第 1 引数で MODE (`hermes` / `gws` / `python` / `npm`) を指定するとそのモジュールだけ再実行する |
 | `lint.sh` | ShellCheck (Bash) / `fish --no-execute` / tmux isolated smoke test / taplo (TOML) / `python3 -m json.tool` (JSON) を実行。GitHub Actions でも同等の静的チェックが走る |
 | `.config/tmux/rename-windows.sh` | tmux window 名を active な通常 pane のプロセス名から更新する。AI sidebar pane が active の場合は最初の通常 pane を基準にする |
 | `.config/tmux/ensure-ai-sidebars.sh` | 各 tmux window に AI pane 一覧 sidebar が無ければ作成する。既存 sidebar の kill / resize は行わない |
@@ -76,20 +75,20 @@ dotfiles 側では扱わない。詳細は claude.codex の `install.sh` と `do
 | `.config/tmux/ai-sidebar-click.sh` | AI sidebar のクリック行から対象 pane を解決して移動する。`AI_SIDEBAR_CLICK_DRY_RUN=1` では対象 pane の出力だけ行う |
 | `.config/tmux/test-ai-sidebars-isolated.sh` | 専用 socket の disposable tmux server だけを使い、sidebar 既定有効化と新規 window hook を検証する |
 
-`install.sh` と `update.sh` は冪等。何度実行しても安全。
+`install.sh` は冪等。何度実行しても安全。
 
 ## 補助モジュールと MODE 引数
 
-install.sh / update.sh は `lib/<name>.sh` を source して関数を組み立て、第 1 引数の MODE
+`install.sh` は `lib/<name>.sh` を source して関数を組み立て、第 1 引数の MODE
 で個別実行を切り替える。MODE 未指定 (= `all`) ではメインフローが全モジュールを順に呼ぶ。
 
-| MODE | install.sh | update.sh |
-|------|-----------|-----------|
-| (none / `all`) | 全モジュールを順に走らせる | 全モジュールを順に走らせる |
-| `hermes` | `ensure_hermes` (公式 installer 取得 → 実行) | `ensure_hermes` |
-| `gws` | `ensure_gws` (brew install googleworkspace-cli) | `update_gws` (brew outdated 判定) |
-| `python` | `ensure_python_tools` (uv venv + Pythonfile) | `ensure_python_tools` |
-| `npm` | — (install.sh では未対応) | `update_npm_globals` (Npmfile) |
+| MODE | 内容 |
+|------|------|
+| (none / `all`) | 全モジュールを順に走らせる |
+| `hermes` | `ensure_hermes` (公式 installer 取得 → 実行) |
+| `gws` | `update_gws` (未導入なら install、導入済みなら brew outdated 判定) |
+| `python` | `ensure_python_tools` (uv venv + Pythonfile) |
+| `npm` | `update_npm_globals` (Npmfile) |
 
 各モジュールは個別失敗が他に波及しないよう、`lib/<name>.sh` 内で必要なツールの有無
 (`command -v`) を先頭で確認する。`Brewfile` には依存ツール (uv / googleworkspace-cli /
@@ -199,18 +198,18 @@ tmux 設定や sidebar 挙動の検証では、default tmux server に対して 
 
 ## よくある落とし穴
 
-- **Google Drive 同期で実行権限が落ちる**: `install.sh` / `update.sh` 冒頭で `chmod 755` を再付与している。手動で実行する前にエラーが出たら `bash` 経由で起動するか権限を再付与する
-- **Fisher プラグインの自動生成ファイルが repo に混入**: Fish の `functions/` を丸ごと symlink すると bobthefish 等のテーマファイルが repo に書き込まれる。これを防ぐため個別ファイル単位で symlink している（`links.conf` 参照）
+- **Google Drive 同期で実行権限が落ちる**: `install.sh` 冒頭で `chmod 755` を再付与している。手動で実行する前にエラーが出たら `bash` 経由で起動するか権限を再付与する
+- **Fisher プラグインの自動生成ファイルが repo に混入**: Fish の `functions/` を丸ごと管理すると bobthefish 等のテーマファイルが repo に書き込まれる。これを防ぐため個別ファイル単位でコピーしている（`links.conf` 参照）
 - **live tmux の sidebar 再作成で focus が動く**: sidebar pane の kill / recreate は通常 pane が active でも active pane を変える場合がある。live 検証では dry-run / 読み取りを優先し、再作成が必要な場合は現在 pane を記録して復元する
 
 ## macOS 固有の設定ファイルパス
 
 一部ツールは macOS で XDG (`~/.config/`) ではなく `~/Library/` 以下を既定の設定ファイル置き場にしている。
-リポジトリ内は XDG 風の `.config/<tool>/` に統一してツリー見通しを揃え、`links.conf` で OS 側の実パスへ symlink する。
+リポジトリ内は XDG 風の `.config/<tool>/` に統一してツリー見通しを揃え、`links.conf` で OS 側の実パスへコピーする。
 
 | ツール | macOS 既定の設定パス | 備考 |
 |-------|--------------------|------|
 | Ghostty | `~/Library/Application Support/com.mitchellh.ghostty/config` | アプリ bundle id ベース |
 | Glow | `~/Library/Preferences/glow/glow.yml` | `XDG_CONFIG_HOME` は無視される (確認済み、v2.1.2) |
 
-`~/.config/<tool>/` 配下に置いても読まれないツールがあるため、「リポジトリ内のパス」と「symlink 先のパス」は必ずしも一致しない。`links.conf` の右辺が正となる。
+`~/.config/<tool>/` 配下に置いても読まれないツールがあるため、「リポジトリ内のパス」と「コピー先のパス」は必ずしも一致しない。`links.conf` の右辺が正となる。

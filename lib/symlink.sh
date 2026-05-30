@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# symlink 定義と作成関数（install.sh / update.sh 共通）
+# 設定ファイル定義とコピー同期関数（install.sh から読み込み）
 
 # macOS APFS は NFD、readlink は NFC を返す場合があるため統一する
 _normalize() { iconv -f utf-8-mac -t utf-8 2>/dev/null <<< "$1" || echo "$1"; }
 
 DOTFILES_DIR="$(_normalize "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)")"
 
-# links.conf からリンク定義を読み込む
+# links.conf からコピー定義を読み込む
 _load_links() {
   local conf="$DOTFILES_DIR/links.conf"
   LINKS=()
@@ -24,8 +24,8 @@ _load_links() {
 }
 _load_links
 
-# リンク先の親ディレクトリが DOTFILES_DIR へのシンボリックリンクの場合、
-# 実ディレクトリに変換する（ディレクトリリンク → 個別ファイルリンク移行用）
+# コピー先の親ディレクトリが DOTFILES_DIR へのシンボリックリンクの場合、
+# 実ディレクトリに変換する（ディレクトリリンク → 実ファイルコピー移行用）
 ensure_real_parent() {
   local dest="$1"
   local dir
@@ -61,7 +61,104 @@ ensure_real_parent() {
   done
 }
 
-create_link() {
+_resolve_link_target() {
+  local link_path="$1"
+  local target
+  target="$(readlink "$link_path")"
+
+  if [[ "$target" == /* ]]; then
+    _normalize "$target"
+  else
+    _normalize "$(cd "$(dirname "$link_path")" && pwd -P)/$target"
+  fi
+}
+
+backup_path() {
+  local dest="$1"
+  local backup
+  backup="${dest}.backup.$(date +%Y%m%d%H%M%S)"
+  echo "バックアップ: $dest → $backup"
+  mv "$dest" "$backup"
+
+  # 古いバックアップを整理（最新 3 件を残す）
+  local count=0
+  local old
+  while IFS= read -r -d '' old; do
+    count=$((count + 1))
+    if [ "$count" -gt 3 ]; then
+      rm -rf "$old"
+    fi
+  done < <(find "$(dirname "$dest")" -maxdepth 1 -name "$(basename "$dest").backup.*" -print0 | sort -zr)
+}
+
+prepare_copy_dest() {
+  local src="$1"
+  local dest="$2"
+
+  # 旧 symlink 管理から実ファイルコピーへ移行する
+  if [ -L "$dest" ]; then
+    local target
+    target="$(_resolve_link_target "$dest")"
+    if [[ "$target" == "$DOTFILES_DIR"* ]]; then
+      echo "移行:     $dest (リンク → コピー)"
+      rm "$dest"
+    else
+      backup_path "$dest"
+    fi
+  fi
+
+  if [ -d "$src" ]; then
+    if [ -e "$dest" ] && [ ! -d "$dest" ]; then
+      backup_path "$dest"
+    fi
+    mkdir -p "$dest"
+  else
+    mkdir -p "$(dirname "$dest")"
+    if [ -d "$dest" ]; then
+      backup_path "$dest"
+    fi
+  fi
+}
+
+copy_file() {
+  local src="$1"
+  local dest="$2"
+
+  prepare_copy_dest "$src" "$dest"
+
+  if [ -e "$dest" ] && cmp -s "$src" "$dest"; then
+    echo "済み:     $dest"
+    return
+  fi
+
+  if [ -e "$dest" ]; then
+    backup_path "$dest"
+  fi
+
+  cp -p "$src" "$dest"
+  echo "コピー:   $dest ← $src"
+}
+
+copy_directory() {
+  local src="$1"
+  local dest="$2"
+
+  prepare_copy_dest "$src" "$dest"
+
+  while IFS= read -r -d '' dir; do
+    local rel="${dir#"$src"/}"
+    [ "$rel" = "$dir" ] && continue
+    mkdir -p "$dest/$rel"
+  done < <(find "$src" -type d -print0)
+
+  while IFS= read -r -d '' file; do
+    local rel="${file#"$src"/}"
+    local dest_file="$dest/$rel"
+    copy_file "$file" "$dest_file"
+  done < <(find "$src" -type f -print0)
+}
+
+copy_item() {
   local src="$DOTFILES_DIR/$1"
   local dest="$2"
 
@@ -73,55 +170,22 @@ create_link() {
   # 親ディレクトリが DOTFILES_DIR へのリンクなら実ディレクトリに変換
   ensure_real_parent "$dest"
 
-  # リンク先の親ディレクトリを作成
-  mkdir -p "$(dirname "$dest")"
-
-  if [ -L "$dest" ]; then
-    # 既にリンク済みか確認（パス比較 + inode フォールバック）
-    local resolved_dest
-    resolved_dest="$(readlink "$dest")"
-    if [ "$resolved_dest" = "$src" ]; then
-      echo "済み:     $dest"
-      return
-    fi
-    # パスが異なっても同じファイルを指していればリンク済みとみなす
-    if [ -e "$dest" ] && [ "$(stat -f '%i' "$src")" = "$(stat -f '%i' "$dest")" ]; then
-      echo "済み:     $dest"
-      return
-    fi
-  elif [ -e "$dest" ] && [ "$(stat -f '%i' "$src" 2>/dev/null)" = "$(stat -f '%i' "$dest" 2>/dev/null)" ]; then
-    # 宛先が通常ファイルでソースと同一 inode → ディレクトリリンク経由で
-    # リポジトリ内のファイルを直接参照している（ln -sf すると破壊される）
-    echo "エラー:   $dest がリポジトリのファイルと同一です（親ディレクトリの symlink 解除が必要）"
-    return 1
+  if [ -d "$src" ]; then
+    copy_directory "$src" "$dest"
+  else
+    copy_file "$src" "$dest"
   fi
-
-  # 既存ファイル/ディレクトリがある場合はバックアップ
-  if [ -e "$dest" ] || [ -L "$dest" ]; then
-    local backup
-    backup="${dest}.backup.$(date +%Y%m%d%H%M%S)"
-    echo "バックアップ: $dest → $backup"
-    mv "$dest" "$backup"
-
-    # 古いバックアップを整理（最新 3 件を残す）
-    local count=0
-    local old
-    while IFS= read -r -d '' old; do
-      count=$((count + 1))
-      if [ "$count" -gt 3 ]; then
-        rm -rf "$old"
-      fi
-    done < <(find "$(dirname "$dest")" -maxdepth 1 -name "$(basename "$dest").backup.*" -print0 | sort -zr)
-  fi
-
-  ln -sf "$src" "$dest"
-  echo "作成:     $dest → $src"
 }
 
-sync_links() {
+sync_files() {
   for entry in "${LINKS[@]}"; do
     local src="${entry%%:*}"
     local dest="${entry#*:}"
-    create_link "$src" "$dest"
+    copy_item "$src" "$dest"
   done
+}
+
+# 旧関数名との互換用。実処理は symlink ではなくコピー同期。
+sync_links() {
+  sync_files
 }

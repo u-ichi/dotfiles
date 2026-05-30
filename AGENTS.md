@@ -17,11 +17,8 @@ Homebrew (Brewfile) でパッケージ管理し、各アプリの設定ファイ
 ## ビルド・実行
 
 ```bash
-# 初回セットアップ (symlink + Claude Code インストール)
+# 初回セットアップ / 日常更新 (設定ファイルコピー + brew/npm 更新)
 ./install.sh
-
-# 日常の更新 (symlink 同期 + brew/npm 更新)
-./update.sh
 
 # パッケージインストール (Brewfile のみ)
 brew bundle
@@ -42,7 +39,7 @@ GitHub Actions (`push` / `PR` on `main`) でも同等のチェックが走る。
 
 ## アーキテクチャ
 
-ディレクトリ構成、symlink 同期方式、スクリプトの責務、Codex マネージドブロック方式の詳細は
+ディレクトリ構成、設定ファイルコピー方式、スクリプトの責務、Codex マネージドブロック方式の詳細は
 [`docs/architecture.md`](docs/architecture.md) を参照。
 
 ## プロジェクト固有の規約

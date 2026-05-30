@@ -1,11 +1,10 @@
 # Google Workspace CLI (`gws`)
 
 Google Workspace API を terminal から扱うための `gws` CLI は Homebrew と dotfiles の
-`install.sh` / `update.sh` で管理する。
+`install.sh` で管理する。
 
 ```bash
 ./install.sh gws
-./update.sh gws
 ```
 
 初回認証は手元の shell で実行する。
@@ -18,7 +17,7 @@ gws auth login
 認証情報は `gws` 側の設定ディレクトリや OS keyring に保存される。OAuth token、credential
 file、service account key はこのリポジトリに置かない。
 
-通常の `./install.sh` / `./update.sh` でも `Brewfile` 経由で `googleworkspace-cli` は管理対象に
+通常の `./install.sh` でも `Brewfile` 経由で `googleworkspace-cli` は管理対象に
 含まれる。`gws` だけを明示的に入れる/更新する時は上記の専用 mode を使う。
 
 ## Codex からの利用方針
