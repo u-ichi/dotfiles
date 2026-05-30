@@ -493,6 +493,120 @@ function __ai_claude_visible_state
     test -n "$detected_state"; and printf '%s\n' "$detected_state"
 end
 
+function __ai_notify_clean_detail --argument-names line
+    set line (string replace -ar '[[:cntrl:]]' '' -- "$line")
+    set line (string replace -ar '^\s*[•●]\s*' '' -- "$line")
+    set line (string replace -ar '^\s*❯\s*[0-9]+\.\s*' '' -- "$line")
+    set line (string replace -ar '\s+' ' ' -- "$line")
+    set line (string trim -- "$line")
+    test -n "$line"; and string shorten -m 120 -- "$line"
+end
+
+function __ai_codex_notify_detail --argument-names state
+    set -l detail
+    set -l last_worked
+    while read -l line
+        set -l clean (__ai_notify_clean_detail "$line")
+        test -n "$clean"; or continue
+
+        if test "$state" = waiting
+            if string match -q '*Would you like to run the following command?*' -- "$clean"
+                set detail "コマンド実行の承認待ち"
+            else if string match -q '*Press enter to confirm or esc to cancel*' -- "$clean"
+                set detail "確認入力待ち"
+            else if string match -q '*Conversation interrupted - tell the model what to do differently*' -- "$clean"
+                set detail "中断後の指示待ち"
+            else if string match -q '*To continue this session, run codex resume*' -- "$clean"
+                set detail "セッション再開待ち"
+            else if string match -qr '(承認してください|承認をお願いします|実行してよいですか|OK.*返してください|どう進めますか|どうしますか|どちらにしますか|ご指示ください)' -- "$clean"
+                set detail "$clean"
+            end
+        else if test "$state" = idle
+            if string match -qr '^Worked for ' -- "$clean"
+                set last_worked "$clean"
+            end
+        end
+    end
+
+    if test "$state" = idle; and test -n "$last_worked"
+        set detail "処理完了 ($last_worked)"
+    end
+    test -n "$detail"; and printf '%s\n' "$detail"
+end
+
+function __ai_claude_notify_detail --argument-names state
+    set -l detail
+    set -l prev_non_empty
+    set -l prompt_question
+    set -l line_no 0
+    set -l prompt_question_line_no 0
+    while read -l line
+        set line_no (math $line_no + 1)
+        set -l clean (__ai_notify_clean_detail "$line")
+        test -n "$clean"; or continue
+
+        if test "$state" = waiting
+            if string match -q '*Enter to select*↑/↓ to navigate*Esc to cancel*' -- "$clean"
+                test -n "$prev_non_empty"; and set detail "$prev_non_empty"
+            else if string match -q '*Do you want to proceed?*' -- "$clean"
+                set prompt_question "$clean"
+                set prompt_question_line_no $line_no
+            else if string match -q '*Do you want to make this edit*' -- "$clean"
+                set prompt_question "$clean"
+                set prompt_question_line_no $line_no
+            else if string match -q '*Do you want to allow*' -- "$clean"
+                set prompt_question "$clean"
+                set prompt_question_line_no $line_no
+            else if string match -q '*Would you like to proceed?*' -- "$clean"
+                set prompt_question "$clean"
+                set prompt_question_line_no $line_no
+            else if string match -qr '^\s*❯\s+[0-9]+\.\s+' -- "$line"
+                if test "$prompt_question_line_no" -gt 0; and test (math $line_no - $prompt_question_line_no) -le 5
+                    set detail "$prompt_question"
+                end
+            end
+        end
+
+        set prev_non_empty "$clean"
+    end
+
+    if test "$state" = idle
+        set detail "作業が完了し入力待ち"
+    end
+    test -n "$detail"; and printf '%s\n' "$detail"
+end
+
+function __ai_notify_detail --argument-names state app display
+    set -l input_lines
+    while read -l line
+        set -a input_lines "$line"
+    end
+
+    set -l detail
+    switch "$app"
+        case codex
+            set detail (printf '%s\n' $input_lines | __ai_codex_notify_detail "$state")
+        case claude
+            set detail (printf '%s\n' $input_lines | __ai_claude_notify_detail "$state")
+    end
+
+    if test -z "$detail"
+        switch "$state"
+            case waiting
+                set detail "確認待ち"
+            case idle
+                set detail "作業完了"
+        end
+    end
+
+    set -l clean_display (__ai_notify_clean_detail "$display")
+    if test -n "$clean_display"; and test "$detail" != "$clean_display"
+        printf '%s · %s\n' "$detail" "$clean_display"
+    else
+        printf '%s\n' "$detail"
+    end
+end
+
 # 状態遷移時にデスクトップ通知を鳴らす (sidebar の状態判定を通知の唯一の源にする統合通知)。
 #   - waiting への遷移 = 確認ウィンドウ / 質問プロンプトが出た → 「確認待ち」通知
 #   - working → idle への遷移 = 処理が完全に完了した → 「完了」通知
@@ -511,19 +625,19 @@ function __ai_notify_title --argument-names app
     end
 end
 
-function __ai_notify_state_change --argument-names pane_id new_state old_state display app
+function __ai_notify_state_change --argument-names pane_id new_state old_state display app detail
     command -q terminal-notifier; or return 0
 
     set -l message
     set -l sound
     switch "$new_state"
         case waiting
-            set message "確認待ち · $display"
+            set message "確認待ち · $detail"
             set sound Tink
         case idle
             # 完了は「作業中からの遷移」に限定する (idle↔idle / waiting→idle では鳴らさない)。
             test "$old_state" = working; or return 0
-            set message "完了 · $display"
+            set message "完了 · $detail"
             set sound Purr
         case '*'
             return 0
@@ -573,7 +687,8 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
     # v22: window header を左付け window_name のみ + クリックで select-window 対応 (entries に window_id を追加)。
     # v23: is_writer 判定 bug 修正 (同 session の 2 つ目以降の sidebar pane が self-check skip されていた)。
     # v24: Goal 表示を「最初の goal 固定」→「最新 goal で上書き」に変更 (goal 切替を反映)。
-    set -l state_version 24
+    # v25: 通知 message に確認待ち理由 / 完了 detail を含める。
+    set -l state_version 25
     while true
         # ===== Section 1: 初期化 (loop 毎の状態リセット) =====
         set -l lines
@@ -669,10 +784,11 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             set -l codex_session_path "$path"
             test -n "$codex_cwd"; and set codex_session_path "$codex_cwd"
 
+            set -l visible
             set -l codex_user_waiting 0
             set -l codex_working 0
             if test "$is_codex_console" = 1
-                set -l visible (tmux capture-pane -p -J -t "$pane_id" 2>/dev/null | tail -24)
+                set visible (tmux capture-pane -p -J -t "$pane_id" 2>/dev/null | tail -24)
                 set -l codex_visible_state (printf '%s\n' $visible | __ai_codex_visible_state)
                 if test "$codex_visible_state" = waiting
                     set codex_user_waiting 1
@@ -685,7 +801,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             # title だけだと braille アニメ文字で working と誤判定されるため。
             set -l claude_user_waiting 0
             if test "$is_claude_console" = 1
-                set -l visible (tmux capture-pane -p -J -t "$pane_id" 2>/dev/null | tail -24)
+                set visible (tmux capture-pane -p -J -t "$pane_id" 2>/dev/null | tail -24)
                 set -l claude_visible_state (printf '%s\n' $visible | __ai_claude_visible_state)
                 if test "$claude_visible_state" = waiting
                     set claude_user_waiting 1
@@ -744,7 +860,8 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
                     set -l notify_app other
                     test "$is_codex_console" = 1; and set notify_app codex
                     test "$is_claude_console" = 1; and set notify_app claude
-                    __ai_notify_state_change "$pane_id" "$detected_state" "$cached_state" "$display" "$notify_app"
+                    set -l notify_detail (printf '%s\n' $visible | __ai_notify_detail "$detected_state" "$notify_app" "$display")
+                    __ai_notify_state_change "$pane_id" "$detected_state" "$cached_state" "$display" "$notify_app" "$notify_detail"
                 end
             end
             # 最終 fallback (上記いずれにも該当しないが state_since が未設定なら "--:--")
