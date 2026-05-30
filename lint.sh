@@ -56,6 +56,11 @@ else
 fi
 echo ""
 
+# === tmux safety guard ===
+echo "=== tmux safety guard ==="
+"$SCRIPT_DIR/scripts/check-tmux-safety.sh" --all || errors=$((errors + 1))
+echo ""
+
 # === taplo (TOML) ===
 echo "=== TOML ==="
 if command -v taplo &>/dev/null; then

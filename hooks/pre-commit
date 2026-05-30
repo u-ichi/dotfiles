@@ -41,6 +41,9 @@ if [ "$lint_errors" -gt 0 ]; then
   exit 1
 fi
 
+# tmux の default server を巻き込む危険なコマンドをブロック
+"$SCRIPT_DIR/scripts/check-tmux-safety.sh" --staged
+
 # === 機密情報スキャン ===
 errors=0
 

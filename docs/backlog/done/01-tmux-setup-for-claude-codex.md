@@ -31,8 +31,8 @@ updated: 2026-04-18
   - 検証: `rg '^set -g history-limit 100000' .config/tmux/tmux.conf`
 - [x] 既存設定（prefix C-s、pbcopy バインド、既存 keybinding）が温存されている
   - 検証: 手動確認（diff で意図しない削除がないこと）
-- [x] `tmux -f .config/tmux/tmux.conf new-session -d \; kill-server` でパースエラーなし
-  - 検証: 上記コマンドの exit code 0
+- [x] 専用 socket の isolated tmux server でパースエラーなし
+  - 検証: `.config/tmux/test-ai-sidebars-isolated.sh` の exit code 0
 - [x] tmux 内で起動した Claude Code が Shift+Enter を改行として認識する
   - 検証: 手動確認
 
@@ -43,7 +43,7 @@ updated: 2026-04-18
 - [x] Brewfile に `brew 'tmux'` を追加（CLI: システム・ユーティリティ セクション）
 - [x] `brew bundle` でインストール（ユーザー承認後）
 - [x] `.config/tmux/tmux.conf` に AI CLI 向け設定ブロックを追記
-- [x] `tmux -f` でパース検証
+- [x] 専用 socket の isolated tmux server でパース検証
 - [x] tmux 起動 + Claude Code で Shift+Enter を手動確認（通知系は #02 に切り出し）
 
 ## 非対応（別バックログ候補）
@@ -89,7 +89,7 @@ updated: 2026-04-18
 | 3 | AI CLI ブロック 4 keyword | `rg -c ... .config/tmux/tmux.conf` | ✅ count=4 |
 | 4 | history-limit 100000 | `rg '^set -g history-limit 100000' ...` | ✅ |
 | 5 | 既存設定温存 | 手動 diff 確認 | ✅ 追加のみ |
-| 6 | `tmux -f` パース | exit code | ✅ 0 |
+| 6 | isolated tmux パース | exit code | ✅ 0 |
 | 7 | Shift+Enter 動作 | 手動確認 | ✅ ユーザー確認済み |
 
 ### 切り出し

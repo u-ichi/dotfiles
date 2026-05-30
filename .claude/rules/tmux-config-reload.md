@@ -25,17 +25,21 @@ IMPORTANT: tmux の `source-file` (`prefix + r` も含む) は**追記型**。
 set -g window-status-current-style default
 ```
 
-## 完全リセット手段
+## 禁止事項
 
-複雑に絡まった場合はサーバーを殺して再生成:
+default server に対する `kill-server` は、同じ server 配下の別 window / pane / AI セッションを
+すべて巻き込むため実行しない。
 
 ```bash
-tmux kill-server
-# または
-tmux kill-session -t <name>
+tmux -S "$tmp_socket" kill-server
 ```
 
-ただしセッション内のプロセスが全部死ぬので最終手段。
+検証や一時 server の掃除で server-wide kill が必要な場合は、必ず `-S <socket>` または
+`-L <name>` で隔離した disposable server に限定する。`-f` は設定ファイル指定であり、
+server 隔離ではない。
+
+既存値のクリアは server kill ではなく、原則として `set -g <option> default` や
+`set -gu <option>` のような明示的な上書き / unset で行う。
 
 ## 適用対象
 
