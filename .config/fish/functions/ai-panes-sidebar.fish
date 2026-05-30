@@ -273,7 +273,7 @@ function __ai_claude_task_lines --argument-names session_file max_line_chars max
               | if $c then
                   .tasks[$e.tid] = {id: $e.tid, subject: $c.subject, parent: $c.parent, status: "pending"}
                   | .order += [$e.tid]
-                  | (if .goal == null and $c.goal != "" then .goal = $c.goal else . end)
+                  | (if $c.goal != "" then .goal = $c.goal else . end)
                   | del(.creates[$e.tuid])
                 else . end
             elif $e.kind == "update" then
@@ -560,7 +560,8 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
     # v21: window header を `-- name --` から `■ name` 形式に変更。
     # v22: window header を左付け window_name のみ + クリックで select-window 対応 (entries に window_id を追加)。
     # v23: is_writer 判定 bug 修正 (同 session の 2 つ目以降の sidebar pane が self-check skip されていた)。
-    set -l state_version 23
+    # v24: Goal 表示を「最初の goal 固定」→「最新 goal で上書き」に変更 (goal 切替を反映)。
+    set -l state_version 24
     while true
         # ===== Section 1: 初期化 (loop 毎の状態リセット) =====
         set -l lines
