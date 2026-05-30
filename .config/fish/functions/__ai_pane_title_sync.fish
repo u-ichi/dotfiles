@@ -42,6 +42,20 @@ function __ai_pane_title_sync_codex_session_start_epoch --argument-names file
     command date -j -f '%Y-%m-%dT%H-%M-%S' "$stamp" +%s 2>/dev/null; or command date -d (printf '%s %s:%s:%s' "$match[2]" "$match[3]" "$match[4]" "$match[5]") +%s 2>/dev/null
 end
 
+function __ai_pane_title_sync_codex_session_id_from_title --argument-names title
+    set -l match (string match -r '([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})' -- "$title")
+    test (count $match) -ge 2; and printf '%s\n' "$match[2]"
+end
+
+function __ai_pane_title_sync_codex_session_file_by_id --argument-names session_id
+    string match -qr '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' -- "$session_id"; or return 1
+
+    set -l sessions_dir "$HOME/.codex/sessions"
+    test -d "$sessions_dir"; or return 1
+
+    command find "$sessions_dir" -type f -name "*$session_id.jsonl" -mtime -30 2>/dev/null | command head -n 1
+end
+
 function __ai_pane_title_sync_codex_find_session_file --argument-names cwd started_at
     if not command -q jq
         return 1
@@ -60,7 +74,7 @@ function __ai_pane_title_sync_codex_find_session_file --argument-names cwd start
         set -l session_started (__ai_pane_title_sync_codex_session_start_epoch "$file")
         string match -qr '^[0-9]+$' -- "$session_started"; or continue
         set -l delta (math "$session_started - $started_at")
-        if test "$delta" -ge -5; and test "$delta" -le 600; and test "$delta" -lt "$best_delta"
+        if test "$delta" -ge -5; and test "$delta" -le 30; and test "$delta" -lt "$best_delta"
             set best_delta "$delta"
             set best_file "$file"
         end
@@ -120,7 +134,24 @@ function __ai_pane_title_sync_codex_watch --argument-names pane_id cwd started_a
         end
 
         set -l session_file (tmux show-option -pqv -t "$pane_id" @ai_codex_session_file 2>/dev/null)
-        if test -z "$session_file"; or not test -f "$session_file"
+        set -l pane_title (tmux display-message -p -t "$pane_id" '#{pane_title}' 2>/dev/null)
+        set -l pane_session_id (__ai_pane_title_sync_codex_session_id_from_title "$pane_title")
+        if test -n "$session_file"
+            if not test -f "$session_file"
+                set session_file ""
+            else if test -n "$pane_session_id"
+                set -l cached_session_id (__ai_pane_title_sync_codex_session_id_from_file "$session_file")
+                if test "$cached_session_id" != "$pane_session_id"
+                    set session_file ""
+                    tmux set-option -p -t "$pane_id" @ai_codex_session_file "" 2>/dev/null
+                end
+            end
+        end
+        if test -z "$session_file"; and test -n "$pane_session_id"
+            set session_file (__ai_pane_title_sync_codex_session_file_by_id "$pane_session_id")
+            test -n "$session_file"; and tmux set-option -p -t "$pane_id" @ai_codex_session_file "$session_file" 2>/dev/null
+        end
+        if test -z "$session_file"
             set session_file (__ai_pane_title_sync_codex_find_session_file "$cwd" "$started_at")
             test -n "$session_file"; and tmux set-option -p -t "$pane_id" @ai_codex_session_file "$session_file" 2>/dev/null
         end

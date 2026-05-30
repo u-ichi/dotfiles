@@ -156,6 +156,23 @@ if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; test
   exit 1
 fi
 
+if command -v jq >/dev/null 2>&1; then
+  codex_sessions_dir="$TEST_HOME/.codex/sessions/2026/05/30"
+  codex_session_a="$codex_sessions_dir/rollout-2026-05-30T12-00-00-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.jsonl"
+  codex_session_b="$codex_sessions_dir/rollout-2026-05-30T12-09-31-bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb.jsonl"
+  mkdir -p "$codex_sessions_dir"
+  printf '%s\n' "{\"type\":\"session_meta\",\"payload\":{\"id\":\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\",\"cwd\":\"$TEST_HOME\"}}" > "$codex_session_a"
+  printf '%s\n' "{\"type\":\"session_meta\",\"payload\":{\"id\":\"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb\",\"cwd\":\"$TEST_HOME\"}}" > "$codex_session_b"
+  if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; set a_start (__ai_codex_session_start_epoch '$codex_session_a'); set title_id (__ai_codex_session_id_from_title 'agent | bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb | Context 1% used'); set by_id (__ai_codex_session_file_by_id bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb); set by_time (__ai_codex_find_session_file '$TEST_HOME' \$a_start); test \"\$title_id\" = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'; and test (basename \"\$by_id\") = 'rollout-2026-05-30T12-09-31-bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb.jsonl'; and test (basename \"\$by_time\") = 'rollout-2026-05-30T12-00-00-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.jsonl'; and not __ai_codex_session_matches_started_at '$codex_session_b' \$a_start"; then
+    echo "ERROR: Codex sidebar session file resolution allows cross-pane collision" >&2
+    exit 1
+  fi
+  if ! fish -c "source '$SCRIPT_DIR/../fish/functions/__ai_pane_title_sync.fish'; set a_start (__ai_pane_title_sync_codex_session_start_epoch '$codex_session_a'); set by_id (__ai_pane_title_sync_codex_session_file_by_id bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb); set by_time (__ai_pane_title_sync_codex_find_session_file '$TEST_HOME' \$a_start); test (__ai_pane_title_sync_codex_session_id_from_title 'agent | bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb | Context 1% used') = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'; and test (basename \"\$by_id\") = 'rollout-2026-05-30T12-09-31-bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb.jsonl'; and test (basename \"\$by_time\") = 'rollout-2026-05-30T12-00-00-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.jsonl'"; then
+    echo "ERROR: Codex pane title session file resolution allows cross-pane collision" >&2
+    exit 1
+  fi
+fi
+
 new_project_dir="$TEST_HOME/new-project"
 mkdir -p "$new_project_dir"
 normal_pane="$(tmux_i list-panes -t 'ai-sidebar-test:1' -F '#{pane_id}	#{@ai_sidebar}' | awk -F '\t' '$2 != "1" { print $1; exit }')"

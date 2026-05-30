@@ -14,7 +14,27 @@ function __ai_codex_session_matches_started_at --argument-names file started_at
     string match -qr '^[0-9]+$' -- "$session_started"; or return 1
 
     set -l delta (math "$session_started - $started_at")
-    test "$delta" -ge -5; and test "$delta" -le 600
+    test "$delta" -ge -5; and test "$delta" -le 30
+end
+
+function __ai_codex_session_id_from_title --argument-names title
+    set -l match (string match -r '([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})' -- "$title")
+    test (count $match) -ge 2; and printf '%s\n' "$match[2]"
+end
+
+function __ai_codex_session_id_from_file --argument-names file
+    set -l name (basename "$file")
+    set -l match (string match -r '^rollout-.*-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$' -- "$name")
+    test (count $match) -ge 2; and printf '%s\n' "$match[2]"
+end
+
+function __ai_codex_session_file_by_id --argument-names session_id
+    string match -qr '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' -- "$session_id"; or return 1
+
+    set -l sessions_dir "$HOME/.codex/sessions"
+    test -d "$sessions_dir"; or return 1
+
+    command find "$sessions_dir" -type f -name "*$session_id.jsonl" -mtime -30 2>/dev/null | command head -n 1
 end
 
 function __ai_codex_find_session_file --argument-names cwd started_at
@@ -35,7 +55,7 @@ function __ai_codex_find_session_file --argument-names cwd started_at
         set -l session_started (__ai_codex_session_start_epoch "$file")
         string match -qr '^[0-9]+$' -- "$session_started"; or continue
         set -l delta (math "$session_started - $started_at")
-        if test "$delta" -ge -5; and test "$delta" -le 600; and test "$delta" -lt "$best_delta"
+        if test "$delta" -ge -5; and test "$delta" -le 30; and test "$delta" -lt "$best_delta"
             set best_delta "$delta"
             set best_file "$file"
         end
@@ -732,7 +752,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
     # v26: 通知 detail 抽出を stdin 非依存にし、writer loop の read 待ち停止を防ぐ。
     # v27: Codex plan の Goal 行を native goal 有無で色分けする。
     # v28: Codex plan の Goal 行を `Goal:` / `目標:` 始まりの explanation のみに限定 (地の文を昇格させない)。
-    set -l state_version 28
+    set -l state_version 29
     while true
         # ===== Section 1: 初期化 (loop 毎の状態リセット) =====
         set -l lines
@@ -744,6 +764,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
         set -l active_codex_path
         set -l active_codex_started_at
         set -l active_codex_session_file
+        set -l active_codex_session_id
         set -l active_claude_pane
         set -l active_claude_display
         set -l active_claude_session_id
@@ -794,6 +815,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             set -l claude_session_id $parts[20]
             set -l claude_cwd $parts[21]
             set -l window_name $parts[22]
+            set -l codex_session_id (__ai_codex_session_id_from_title "$title")
 
             test "$loc" = (tmux display-message -p -t "$TMUX_PANE" '#{window_index}.#{pane_index}' 2>/dev/null); and continue
             test "$is_sidebar" = 1; and continue
@@ -947,6 +969,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
                     set active_codex_path "$codex_session_path"
                     set active_codex_started_at "$codex_started_at"
                     set active_codex_session_file "$codex_session_file"
+                    set active_codex_session_id "$codex_session_id"
                 end
             end
             if test "$window_id" = "$sidebar_window_id"; and test "$is_claude_console" = 1
@@ -1046,9 +1069,27 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
         # 解決した jsonl path は @ai_codex_session_file に cache する (次回 loop で再利用)。
         if test -n "$active_codex_pane"
             set -l plan_session_file
-            if string match -qr '^[0-9]+$' -- "$active_codex_started_at"
+            if test -n "$active_codex_session_id"
                 set plan_session_file "$active_codex_session_file"
-                if test -n "$plan_session_file"; and not __ai_codex_session_matches_started_at "$plan_session_file" "$active_codex_started_at"
+                if test -n "$plan_session_file"
+                    if not test -f "$plan_session_file"
+                        set plan_session_file ""
+                    else if test (__ai_codex_session_id_from_file "$plan_session_file") != "$active_codex_session_id"
+                        set plan_session_file ""
+                    end
+                    if test -z "$plan_session_file"
+                        test "$is_writer" = 1; and tmux set-option -p -t "$active_codex_pane" @ai_codex_session_file "" 2>/dev/null
+                    end
+                end
+                if test -z "$plan_session_file"
+                    set plan_session_file (__ai_codex_session_file_by_id "$active_codex_session_id")
+                    if test -n "$plan_session_file"; and test "$is_writer" = 1
+                        tmux set-option -p -t "$active_codex_pane" @ai_codex_session_file "$plan_session_file" 2>/dev/null
+                    end
+                end
+            else if string match -qr '^[0-9]+$' -- "$active_codex_started_at"
+                set plan_session_file "$active_codex_session_file"
+                if test -n "$plan_session_file"; and begin; not test -f "$plan_session_file"; or not __ai_codex_session_matches_started_at "$plan_session_file" "$active_codex_started_at"; end
                     set plan_session_file ""
                     test "$is_writer" = 1; and tmux set-option -p -t "$active_codex_pane" @ai_codex_session_file "" 2>/dev/null
                 end
