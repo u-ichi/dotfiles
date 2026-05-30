@@ -20,7 +20,7 @@
 │   ├── gws.sh                  #   Google Workspace CLI (gws) の明示導入・更新補助
 │   └── python.sh               #   uv ベースの Python automation tools (Pythonfile) 同期
 ├── Brewfile                    # Homebrew パッケージ・cask 定義
-├── Npmfile                     # npm グローバルパッケージ定義 (goalbuddy 等)
+├── Npmfile                     # npm グローバルパッケージ定義
 ├── Pythonfile                  # uv 経由で導入する Python パッケージ定義 (python-pptx 等)
 ├── .config/
 │   ├── fish/                   # Fish Shell 設定
@@ -67,7 +67,7 @@ dotfiles 側では扱わない。詳細は claude.codex の `install.sh` と `do
 | スクリプト | 役割 |
 |-----------|------|
 | `install.sh` | 初回セットアップ。Brewfile 適用、symlink 作成、Git ローカル設定の対話的入力、Claude Code / mkcert / Fisher / Terraform / Python tools のインストール、macOS defaults 適用。第 1 引数で MODE (`hermes` / `gws` / `python`) を指定するとそのモジュールだけ再実行する |
-| `update.sh` | 日常運用。symlink 再同期、AWS 設定の再展開、`brew bundle` + `brew upgrade`、Terraform 最新化、Npmfile からの `npm i -g` + GoalBuddy update / agents / extension 維持、Pythonfile を uv で同期。第 1 引数で MODE (`hermes` / `gws` / `python` / `npm`) を指定するとそのモジュールだけ再実行する |
+| `update.sh` | 日常運用。symlink 再同期、AWS 設定の再展開、`brew bundle` + `brew upgrade`、Terraform 最新化、Npmfile からの `npm i -g`、Pythonfile を uv で同期。第 1 引数で MODE (`hermes` / `gws` / `python` / `npm`) を指定するとそのモジュールだけ再実行する |
 | `lint.sh` | ShellCheck (Bash) / `fish --no-execute` / tmux isolated smoke test / taplo (TOML) / `python3 -m json.tool` (JSON) を実行。GitHub Actions でも同等の静的チェックが走る |
 | `.config/tmux/rename-windows.sh` | tmux window 名を active な通常 pane のプロセス名から更新する。AI sidebar pane が active の場合は最初の通常 pane を基準にする |
 | `.config/tmux/ensure-ai-sidebars.sh` | 各 tmux window に AI pane 一覧 sidebar が無ければ作成する。既存 sidebar の kill / resize は行わない |
@@ -89,7 +89,7 @@ install.sh / update.sh は `lib/<name>.sh` を source して関数を組み立�
 | `hermes` | `ensure_hermes` (公式 installer 取得 → 実行) | `ensure_hermes` |
 | `gws` | `ensure_gws` (brew install googleworkspace-cli) | `update_gws` (brew outdated 判定) |
 | `python` | `ensure_python_tools` (uv venv + Pythonfile) | `ensure_python_tools` |
-| `npm` | — (install.sh では未対応) | `update_npm_globals` (Npmfile + goalbuddy 一式) |
+| `npm` | — (install.sh では未対応) | `update_npm_globals` (Npmfile) |
 
 各モジュールは個別失敗が他に波及しないよう、`lib/<name>.sh` 内で必要なツールの有無
 (`command -v`) を先頭で確認する。`Brewfile` には依存ツール (uv / googleworkspace-cli /

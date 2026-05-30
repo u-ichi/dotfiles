@@ -31,17 +31,6 @@ update_npm_globals() {
     echo ""
   fi
 
-  if command -v goalbuddy &>/dev/null; then
-    echo "=== GoalBuddy の更新 ==="
-    goalbuddy update --json
-    goalbuddy agents --force
-    if ! goalbuddy extend doctor local-goal-board --json >/dev/null 2>&1; then
-      if ! goalbuddy extend install local-goal-board --json; then
-        echo "警告: local-goal-board extension のインストールに失敗しました"
-      fi
-    fi
-    echo ""
-  fi
 }
 
 if [ "$MODE" = "npm" ]; then
