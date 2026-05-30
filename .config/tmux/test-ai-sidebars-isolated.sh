@@ -178,9 +178,16 @@ if command -v jq >/dev/null 2>&1; then
     exit 1
   fi
   printf '%s\n' '{"name":"update_plan","payload":{"arguments":"{\"explanation\":\"Goal: tmux sidebar に Goal を表示する\",\"plan\":[{\"step\":\"Task: plan 表示を直す\",\"status\":\"completed\"},{\"step\":\"SubTask: plan を読む\",\"status\":\"completed\"},{\"step\":\"SubTask: Goal 行を出す\",\"status\":\"completed\"},{\"step\":\"SubTask: live 表示を確認する\",\"status\":\"completed\"}]}"}}' >> "$plan_file"
-  if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; set lines (__ai_codex_plan_lines '$plan_file' 80 20); test \"\$lines[2]\" = '✓ 3/3 plan 表示を直す'"; then
+  if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; set lines (__ai_codex_plan_lines '$plan_file' 80 20); test \"\$lines[2]\" = '✓ 3/3 plan 表示を直す'; and test \"\$lines[3]\" = '  ✓ plan を読む'; and test \"\$lines[4]\" = '  ✓ Goal 行を出す'; and test \"\$lines[5]\" = '  ✓ live 表示を確認する'"; then
     echo "ERROR: Codex completed plan line is invalid" >&2
     fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; __ai_codex_plan_lines '$plan_file' 80 20" >&2 || true
+    exit 1
+  fi
+  response_item_plan_file="$SOCKET_DIR/codex-plan-response-item.jsonl"
+  printf '%s\n' '{"type":"response_item","payload":{"type":"function_call_output","output":"{\"name\":\"update_plan\",\"payload\":{\"arguments\":\"stale\"}}"}}' '{"type":"response_item","payload":{"type":"function_call","name":"update_plan","arguments":"{\"explanation\":\"Goal: response_item schema を読む\",\"plan\":[{\"step\":\"Task: schema 対応を確認する\",\"status\":\"in_progress\"},{\"step\":\"SubTask: 実 event を読む\",\"status\":\"in_progress\"}]}"}}' > "$response_item_plan_file"
+  if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; set lines (__ai_codex_plan_lines '$response_item_plan_file' 80 20); string match -q '*Goal: response_item schema を読む*' -- \"\$lines[1]\"; and test \"\$lines[2]\" = '> 0/1 schema 対応を確認する'; and test \"\$lines[3]\" = '  > 実 event を読む'"; then
+    echo "ERROR: Codex response_item plan extraction is invalid" >&2
+    fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; __ai_codex_plan_lines '$response_item_plan_file' 80 20" >&2 || true
     exit 1
   fi
   no_prefix_plan_file="$SOCKET_DIR/codex-plan-no-prefix.jsonl"

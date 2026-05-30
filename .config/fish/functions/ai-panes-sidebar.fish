@@ -56,12 +56,17 @@ function __ai_codex_plan_lines --argument-names session_file max_line_chars max_
         set max_display_lines 1
     end
 
-    set -l plan_event
-    if command -q rg
-        set plan_event (command rg '"name":"update_plan"' "$session_file" | command tail -n 1)
-    else
-        set plan_event (command grep '"name":"update_plan"' "$session_file" | command tail -n 1)
-    end
+    set -l plan_event (command jq -c '
+        select(
+            (.type == "response_item" and .payload.type == "function_call" and .payload.name == "update_plan")
+            or (.name == "update_plan")
+        )
+        | if .name == "update_plan" then
+            .
+          else
+            {payload: {arguments: .payload.arguments}}
+          end
+    ' "$session_file" 2>/dev/null | command tail -n 1)
     test -n "$plan_event"; or return 1
 
     set -l goal_line (printf '%s\n' "$plan_event" | command jq -r '
@@ -102,7 +107,8 @@ function __ai_codex_plan_lines --argument-names session_file max_line_chars max_
         | .groups as $groups
         | (
             ($groups | to_entries | map(select((.value.status == "in_progress") or any(.value.rows[]?; .status == "in_progress"))) | .[0].key)
-          ) as $active_index
+          ) as $maybe_active_index
+        | (if $maybe_active_index == null then (($groups | length) - 1) else $maybe_active_index end) as $active_index
         | $groups
         | to_entries[]
         | .key as $group_index
@@ -161,10 +167,10 @@ function __ai_codex_plan_lines --argument-names session_file max_line_chars max_
                 set -l row_count $parts[6]
                 set -l title $parts[7]
                 set -l marker -
-                if test "$is_active" = true
-                    set marker '>'
-                else if test "$item_status" = completed
+                if test "$item_status" = completed
                     set marker '✓'
+                else if test "$is_active" = true
+                    set marker '>'
                 end
 
                 if test "$row_count" -gt 0
