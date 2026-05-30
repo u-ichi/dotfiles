@@ -145,6 +145,11 @@ if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; test
   exit 1
 fi
 
+if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; test (__ai_notify_title codex) = 'Codex CLI'; and test (__ai_notify_title claude) = 'Claude Code'; and test (__ai_notify_title other) = 'AI Console'"; then
+  echo "ERROR: AI notification title mapping is invalid" >&2
+  exit 1
+fi
+
 if command -v jq >/dev/null 2>&1; then
   plan_file="$SOCKET_DIR/codex-plan.jsonl"
   printf '%s\n' '{"name":"update_plan","payload":{"arguments":"{\"explanation\":\"Goal: tmux sidebar に Goal を表示する\",\"plan\":[{\"step\":\"Task: 古い作業\",\"status\":\"completed\"},{\"step\":\"SubTask: 古い確認\",\"status\":\"completed\"},{\"step\":\"Task: plan 表示を直す\",\"status\":\"in_progress\"},{\"step\":\"SubTask: plan を読む\",\"status\":\"completed\"},{\"step\":\"SubTask: Goal 行を出す\",\"status\":\"in_progress\"},{\"step\":\"SubTask: live 表示を確認する\",\"status\":\"pending\"}]}"}}' > "$plan_file"
@@ -214,7 +219,7 @@ sidebar_pane="$(tmux_i list-panes -t 'ai-sidebar-test:1' -F '#{pane_id}	#{@ai_si
 tmux_i resize-pane -t "$sidebar_pane" -x 4
 TMUX="$SOCKET,0,0" "$SCRIPT_DIR/ensure-ai-sidebars.sh"
 sidebar_width="$(tmux_i display-message -p -t "$sidebar_pane" '#{pane_width}')"
-if [ "$sidebar_width" -ne 26 ]; then
+if [ "$sidebar_width" -ne 32 ]; then
   echo "ERROR: existing sidebar width was not restored: $sidebar_width" >&2
   exit 1
 fi

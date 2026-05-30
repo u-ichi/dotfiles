@@ -500,7 +500,18 @@ end
 # 通知をクリックすると該当 session/window/pane に switch + Ghostty を前面化する (-execute)。
 # 自分が今その pane を見ている (terminal 前面 + active pane + current window + attached)
 # 時は鳴らさない (旧 notify.sh のフォーカス抑制を踏襲)。
-function __ai_notify_state_change --argument-names pane_id new_state old_state display
+function __ai_notify_title --argument-names app
+    switch "$app"
+        case codex
+            printf '%s\n' "Codex CLI"
+        case claude
+            printf '%s\n' "Claude Code"
+        case '*'
+            printf '%s\n' "AI Console"
+    end
+end
+
+function __ai_notify_state_change --argument-names pane_id new_state old_state display app
     command -q terminal-notifier; or return 0
 
     set -l message
@@ -535,7 +546,8 @@ function __ai_notify_state_change --argument-names pane_id new_state old_state d
     set -l sess (tmux display-message -p -t "$pane_id" '#{session_name}' 2>/dev/null)
     set -l exec_cmd "$tmux_bin switch-client -t '$sess'; $tmux_bin select-window -t '$pane_id'; $tmux_bin select-pane -t '$pane_id'; open -a Ghostty"
 
-    terminal-notifier -title "Claude Code" -message "$message" -sound "$sound" \
+    set -l title (__ai_notify_title "$app")
+    terminal-notifier -title "$title" -message "$message" -sound "$sound" \
         -group "ai-sidebar-$pane_id" -execute "$exec_cmd" 2>/dev/null &
 end
 
@@ -729,7 +741,10 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
                 # この分岐は writer 再起動直後の再観測 (needs_fresh_state=1) を含まないため、
                 # 真の遷移エッジでのみ鳴る。
                 if test "$is_writer" = 1; and test "$is_llm_console" = 1
-                    __ai_notify_state_change "$pane_id" "$detected_state" "$cached_state" "$display"
+                    set -l notify_app other
+                    test "$is_codex_console" = 1; and set notify_app codex
+                    test "$is_claude_console" = 1; and set notify_app claude
+                    __ai_notify_state_change "$pane_id" "$detected_state" "$cached_state" "$display" "$notify_app"
                 end
             end
             # 最終 fallback (上記いずれにも該当しないが state_since が未設定なら "--:--")
