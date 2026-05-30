@@ -17,6 +17,9 @@ end
 function __ai_pane_title_sync_clear --argument-names pane_id
     test -n "$pane_id"; or return 1
 
+    # AI セッション終了時のクリーンアップ。手動指定の @fixed_title (prefix + t) も
+    # ここでクリアし、pane border を pane_title (basename) 表示に戻す。
+    tmux set-option -p -t "$pane_id" @fixed_title "" 2>/dev/null
     tmux set-option -p -t "$pane_id" @ai_base_title "" 2>/dev/null
     tmux set-option -p -t "$pane_id" @ai_title_source "" 2>/dev/null
     tmux set-option -p -t "$pane_id" @ai_title_updated_at "" 2>/dev/null

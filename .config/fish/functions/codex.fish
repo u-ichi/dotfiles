@@ -72,7 +72,8 @@ function __codex_reset_pane_title
         return
     end
 
-    # 自動タイトルだけを捨てる。@fixed_title はユーザー指定なので残す。
+    # pane title を pwd basename に戻す。手動指定の @fixed_title (prefix + t) も
+    # __ai_pane_title_sync clear がクリアし、AI 終了時は border を basename 表示に戻す。
     set -l title (basename "$PWD")
     tmux select-pane -t "$TMUX_PANE" -T "$title" 2>/dev/null
     __codex_ensure_ai_pane_title_sync
