@@ -69,6 +69,23 @@ else
 fi
 echo ""
 
+# === Git config ===
+echo "=== Git config ==="
+# shellcheck disable=SC2088,SC2016
+expected_git_include_path='~/.config/git/config.local'
+# shellcheck disable=SC2016
+expected_git_local_assignment='GIT_LOCAL="$HOME/.config/git/config.local"'
+git_include_path="$(git -C "$SCRIPT_DIR" config --file "$SCRIPT_DIR/.config/git/config" --get include.path || true)"
+if [ "$git_include_path" != "$expected_git_include_path" ]; then
+  echo "  エラー: .config/git/config の include.path が ~/.config/git/config.local ではありません: $git_include_path"
+  errors=$((errors + 1))
+fi
+if ! grep -Fq "$expected_git_local_assignment" "$SCRIPT_DIR/install.sh"; then
+  echo "  エラー: install.sh の Git ローカル設定生成先が ~/.config/git/config.local ではありません"
+  errors=$((errors + 1))
+fi
+echo ""
+
 # === JSON (python3 組み込み) ===
 echo "=== JSON ==="
 while IFS= read -r f; do
