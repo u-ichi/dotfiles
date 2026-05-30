@@ -51,7 +51,6 @@ brew 'pstree'
 brew 'terminal-notifier'
 brew 'tmux'
 brew 'wget'
-brew 'waydabber/betterdisplay/betterdisplaycli'
 
 # === GUI: 開発 ===
 cask 'codex'
@@ -92,6 +91,7 @@ cask 'alt-tab'
 cask 'aws-vpn-client'
 cask 'atok'
 cask 'applite'
+# betterdisplaycli は cask が同梱するバイナリを配置する
 cask 'betterdisplay'
 cask 'bitwarden'
 cask 'caffeine'

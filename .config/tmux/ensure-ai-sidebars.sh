@@ -13,12 +13,27 @@ sidebar_command='sleep 0.2; exec fish -c ai-panes-sidebar'
 
 [ -z "${TMUX:-}" ] && exit 0
 
+lock_name="ai-sidebars-ensure"
+cleanup() {
+  tmux wait-for -U "$lock_name" 2>/dev/null || true
+}
+tmux wait-for -L "$lock_name" 2>/dev/null || exit 0
+trap cleanup EXIT
+
 while IFS=$'\t' read -r win_id win_width; do
   [ -z "$win_id" ] && continue
   [ "${win_width:-0}" -lt "$min_width" ] && continue
 
-  sidebar_pane="$(tmux list-panes -t "$win_id" -F '#{pane_id}	#{@ai_sidebar}' 2>/dev/null \
-    | awk -F '\t' '$2 == "1" { print $1; exit }')"
+  sidebar_panes=()
+  while IFS=$'\t' read -r pane_id is_sidebar; do
+    [ -z "$pane_id" ] && continue
+    [ "$is_sidebar" = "1" ] && sidebar_panes+=("$pane_id")
+  done < <(tmux list-panes -t "$win_id" -F '#{pane_id}	#{@ai_sidebar}' 2>/dev/null)
+
+  sidebar_pane="${sidebar_panes[0]:-}"
+  for extra_sidebar_pane in "${sidebar_panes[@]:1}"; do
+    tmux kill-pane -t "$extra_sidebar_pane" 2>/dev/null || true
+  done
 
   target_pane="$(
     tmux list-panes -t "$win_id" -F '#{pane_id}	#{@ai_sidebar}	#{pane_active}' 2>/dev/null \
