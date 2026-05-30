@@ -120,6 +120,13 @@ if ! printf '%s\n' "$kill_pane_hook" | grep -q 'cleanup-ai-sidebars.sh'; then
   exit 1
 fi
 
+pane_exited_hook="$(tmux_i show-hooks -g pane-exited)"
+if ! printf '%s\n' "$pane_exited_hook" | grep -q 'cleanup-ai-sidebars.sh'; then
+  echo "ERROR: pane-exited hook does not clean up orphan sidebars (shell exit path)" >&2
+  printf '%s\n' "$pane_exited_hook" >&2
+  exit 1
+fi
+
 TMUX="$SOCKET,0,0" "$SCRIPT_DIR/ensure-ai-sidebars.sh"
 wait_for_sidebar 'ai-sidebar-test:1'
 expected_sidebar_version="$(/usr/bin/awk '/^[[:space:]]*set -l state_version[[:space:]]+[0-9]+/ {print $4; exit}' "$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish")"
@@ -218,5 +225,14 @@ second_window_id="$(tmux_i display-message -p -t 'ai-sidebar-test:2' '#{window_i
 second_normal_pane="$(tmux_i list-panes -t 'ai-sidebar-test:2' -F '#{pane_id}	#{@ai_sidebar}' | awk -F '\t' '$2 != "1" { print $1; exit }')"
 tmux_i kill-pane -t "$second_normal_pane"
 wait_for_window_absent "$second_window_id"
+
+# shell の正常 exit (Ctrl+D 相当) でも orphan sidebar を掃除し window が閉じること。
+# after-kill-pane は kill-pane コマンドでしか発火しないため、exit 経路は pane-exited
+# hook で拾う。window index は renumber-windows で変わるため window_id で追跡する。
+third_window_id="$(tmux_i new-window -d -n third -P -F '#{window_id}' 'bash')"
+wait_for_sidebar "$third_window_id"
+third_normal_pane="$(tmux_i list-panes -t "$third_window_id" -F '#{pane_id}	#{@ai_sidebar}' | awk -F '\t' '$2 != "1" { print $1; exit }')"
+tmux_i send-keys -t "$third_normal_pane" 'exit' Enter
+wait_for_window_absent "$third_window_id"
 
 echo "tmux AI sidebar isolated test passed"
