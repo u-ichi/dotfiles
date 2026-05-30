@@ -505,7 +505,7 @@ end
 function __ai_codex_notify_detail --argument-names state
     set -l detail
     set -l last_worked
-    while read -l line
+    for line in $argv[2..-1]
         set -l clean (__ai_notify_clean_detail "$line")
         test -n "$clean"; or continue
 
@@ -540,7 +540,7 @@ function __ai_claude_notify_detail --argument-names state
     set -l prompt_question
     set -l line_no 0
     set -l prompt_question_line_no 0
-    while read -l line
+    for line in $argv[2..-1]
         set line_no (math $line_no + 1)
         set -l clean (__ai_notify_clean_detail "$line")
         test -n "$clean"; or continue
@@ -577,17 +577,14 @@ function __ai_claude_notify_detail --argument-names state
 end
 
 function __ai_notify_detail --argument-names state app display
-    set -l input_lines
-    while read -l line
-        set -a input_lines "$line"
-    end
+    set -l input_lines $argv[4..-1]
 
     set -l detail
     switch "$app"
         case codex
-            set detail (printf '%s\n' $input_lines | __ai_codex_notify_detail "$state")
+            set detail (__ai_codex_notify_detail "$state" $input_lines)
         case claude
-            set detail (printf '%s\n' $input_lines | __ai_claude_notify_detail "$state")
+            set detail (__ai_claude_notify_detail "$state" $input_lines)
     end
 
     if test -z "$detail"
@@ -688,7 +685,8 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
     # v23: is_writer 判定 bug 修正 (同 session の 2 つ目以降の sidebar pane が self-check skip されていた)。
     # v24: Goal 表示を「最初の goal 固定」→「最新 goal で上書き」に変更 (goal 切替を反映)。
     # v25: 通知 message に確認待ち理由 / 完了 detail を含める。
-    set -l state_version 25
+    # v26: 通知 detail 抽出を stdin 非依存にし、writer loop の read 待ち停止を防ぐ。
+    set -l state_version 26
     while true
         # ===== Section 1: 初期化 (loop 毎の状態リセット) =====
         set -l lines
@@ -860,7 +858,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
                     set -l notify_app other
                     test "$is_codex_console" = 1; and set notify_app codex
                     test "$is_claude_console" = 1; and set notify_app claude
-                    set -l notify_detail (printf '%s\n' $visible | __ai_notify_detail "$detected_state" "$notify_app" "$display")
+                    set -l notify_detail (__ai_notify_detail "$detected_state" "$notify_app" "$display" $visible)
                     __ai_notify_state_change "$pane_id" "$detected_state" "$cached_state" "$display" "$notify_app" "$notify_detail"
                 end
             end
