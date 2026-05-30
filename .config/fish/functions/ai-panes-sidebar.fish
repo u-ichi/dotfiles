@@ -493,6 +493,52 @@ function __ai_claude_visible_state
     test -n "$detected_state"; and printf '%s\n' "$detected_state"
 end
 
+# 状態遷移時にデスクトップ通知を鳴らす (sidebar の状態判定を通知の唯一の源にする統合通知)。
+#   - waiting への遷移 = 確認ウィンドウ / 質問プロンプトが出た → 「確認待ち」通知
+#   - working → idle への遷移 = 処理が完全に完了した → 「完了」通知
+#   - それ以外の遷移 (working 入り等) は無音
+# 通知をクリックすると該当 session/window/pane に switch + Ghostty を前面化する (-execute)。
+# 自分が今その pane を見ている (terminal 前面 + active pane + current window + attached)
+# 時は鳴らさない (旧 notify.sh のフォーカス抑制を踏襲)。
+function __ai_notify_state_change --argument-names pane_id new_state old_state display
+    command -q terminal-notifier; or return 0
+
+    set -l message
+    set -l sound
+    switch "$new_state"
+        case waiting
+            set message "確認待ち · $display"
+            set sound Tink
+        case idle
+            # 完了は「作業中からの遷移」に限定する (idle↔idle / waiting→idle では鳴らさない)。
+            test "$old_state" = working; or return 0
+            set message "完了 · $display"
+            set sound Purr
+        case '*'
+            return 0
+    end
+
+    # フォーカス抑制: active pane + current window + attached かつ terminal が前面なら skip。
+    set -l foc (tmux display-message -p -t "$pane_id" '#{pane_active},#{window_active},#{session_attached}' 2>/dev/null)
+    set -l fp (string split ',' -- "$foc")
+    if test (count $fp) -ge 3; and test "$fp[1]" = 1; and test "$fp[2]" = 1; and test "$fp[3]" != 0
+        set -l front (osascript -e 'tell application "System Events" to get name of first application process whose frontmost is true' 2>/dev/null)
+        switch "$front"
+            case Ghostty ghostty Terminal iTerm2 Alacritty WezTerm kitty Hyper
+                return 0
+        end
+    end
+
+    # クリック時アクション: 該当 session/window/pane を選択し Ghostty を前面化する。
+    # pane_id (%N) は server 全体で一意なので select-window/-pane の target に使える。
+    set -l tmux_bin (command -v tmux)
+    set -l sess (tmux display-message -p -t "$pane_id" '#{session_name}' 2>/dev/null)
+    set -l exec_cmd "$tmux_bin switch-client -t '$sess'; $tmux_bin select-window -t '$pane_id'; $tmux_bin select-pane -t '$pane_id'; open -a Ghostty"
+
+    terminal-notifier -title "Claude Code" -message "$message" -sound "$sound" \
+        -group "ai-sidebar-$pane_id" -execute "$exec_cmd" 2>/dev/null &
+end
+
 function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
     if not set -q TMUX
         echo "ai-panes-sidebar: not inside tmux" >&2
@@ -508,7 +554,10 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
     # 関数のロジックを書き換えたら必ずこの数値を上げる (live writer pane は fish の
     # autoload で旧版を memory に抱え続けるため、bump → respawn でしか反映できない)。
     # v8 以降は writer 自身が state_version をファイルから読んで自己 re-exec する。
-    set -l state_version 17
+    # v18: 状態遷移 (working→idle / →waiting) で統合デスクトップ通知を発火。
+    # v19: window 単位で group 化、`-- window_name --` ヘッダを各 group の先頭に挿入。
+    # v20: header の printf を `%s` ベースに修正 (fish printf の `--` options-terminator 問題)。
+    set -l state_version 20
     while true
         # ===== Section 1: 初期化 (loop 毎の状態リセット) =====
         set -l lines
@@ -531,7 +580,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
         # tmux list-panes で全 pane の option を 1 回でまとめて取得する (毎 pane に
         # show-option を打つより速い)。format string の field 数を変えたら、下の
         # `string split -m N` (parts 配列の総数 - 1) も合わせて更新すること。
-        set -l raw (tmux list-panes -s -F '#{window_index}.#{pane_index}	#{pane_title}	#{@fixed_title}	#{@ai_base_title}	#{@ai_sidebar}	#{pane_current_path}	#{window_index}	#{@ai_display_index}	#{pane_current_command}	#{pane_id}	#{@ai_state}	#{@ai_state_since}	#{@ai_state_version}	#{pane_active}	#{window_id}	#{@ai_codex_started_at}	#{@ai_codex_session_file}	#{@ai_codex_cwd}	#{@ai_app}	#{@ai_claude_session_id}	#{@ai_claude_cwd}' 2>/dev/null)
+        set -l raw (tmux list-panes -s -F '#{window_index}.#{pane_index}	#{pane_title}	#{@fixed_title}	#{@ai_base_title}	#{@ai_sidebar}	#{pane_current_path}	#{window_index}	#{@ai_display_index}	#{pane_current_command}	#{pane_id}	#{@ai_state}	#{@ai_state_since}	#{@ai_state_version}	#{pane_active}	#{window_id}	#{@ai_codex_started_at}	#{@ai_codex_session_file}	#{@ai_codex_cwd}	#{@ai_app}	#{@ai_claude_session_id}	#{@ai_claude_cwd}	#{window_name}' 2>/dev/null)
         set -l writer_pane (tmux list-panes -s -F '#{pane_id}	#{@ai_sidebar}' 2>/dev/null | awk -F '\t' '$2 == "1" {print $1; exit}')
         set -l is_writer 0
         test "$TMUX_PANE" = "$writer_pane"; and set is_writer 1
@@ -545,13 +594,14 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
         #   - sidebar と同じ window で active な Codex/Claude pane を active_* 変数に記録
         set -l entries
         for line in $raw
-            set -l parts (string split -m 20 \t -- $line)
+            set -l parts (string split -m 21 \t -- $line)
             set -l loc $parts[1]
             set -l title $parts[2]
             set -l fixed_title $parts[3]
             set -l base_title $parts[4]
             set -l is_sidebar $parts[5]
             set -l path $parts[6]
+            set -l window_index $parts[7]
             set -l command_name (string lower -- $parts[9])
             set -l pane_id $parts[10]
             set -l cached_state $parts[11]
@@ -565,6 +615,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             set -l ai_app $parts[19]
             set -l claude_session_id $parts[20]
             set -l claude_cwd $parts[21]
+            set -l window_name $parts[22]
 
             test "$loc" = (tmux display-message -p -t "$TMUX_PANE" '#{window_index}.#{pane_index}' 2>/dev/null); and continue
             test "$is_sidebar" = 1; and continue
@@ -667,6 +718,12 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             if test "$needs_fresh_state" = 0; and test -n "$cached_state"; and test "$detected_state" != "$cached_state"
                 set display_state $detected_state
                 set state_since "$now_hm"
+                # 状態判定を唯一の源にした統合通知 (writer かつ LLM console のみ)。
+                # この分岐は writer 再起動直後の再観測 (needs_fresh_state=1) を含まないため、
+                # 真の遷移エッジでのみ鳴る。
+                if test "$is_writer" = 1; and test "$is_llm_console" = 1
+                    __ai_notify_state_change "$pane_id" "$detected_state" "$cached_state" "$display"
+                end
             end
             # 最終 fallback (上記いずれにも該当しないが state_since が未設定なら "--:--")
             if test -z "$display_state"
@@ -690,14 +747,14 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
 
             if test "$display_state" = waiting
                 set -l row (printf '%s ? %s' "$state_since" "$display")
-                set -a entries (printf 'waiting\t%s\t%s\t%s\tyellow\t%s\t%s' "$state_sort_key" "$kind_sort_key" "$console_kind" "$row" "$pane_id")
+                set -a entries (printf 'waiting\t%s\t%s\t%s\tyellow\t%s\t%s\t%s\t%s' "$state_sort_key" "$kind_sort_key" "$console_kind" "$row" "$pane_id" "$window_index" "$window_name")
             else if test "$display_state" = working
                 set -l row (printf '%s ▶ %s' "$state_since" "$display")
-                set -a entries (printf 'working\t%s\t%s\t%s\tgreen\t%s\t%s' "$state_sort_key" "$kind_sort_key" "$console_kind" "$row" "$pane_id")
+                set -a entries (printf 'working\t%s\t%s\t%s\tgreen\t%s\t%s\t%s\t%s' "$state_sort_key" "$kind_sort_key" "$console_kind" "$row" "$pane_id" "$window_index" "$window_name")
             else if test "$is_llm_console" = 1
-                set -a entries (printf 'idle\t%s\t%s\t%s\tnormal\t%s\t%s' "$kind_sort_key" "$state_sort_key" "$console_kind" (printf '%s ■ %s' "$state_since" "$display") "$pane_id")
+                set -a entries (printf 'idle\t%s\t%s\t%s\tnormal\t%s\t%s\t%s\t%s' "$kind_sort_key" "$state_sort_key" "$console_kind" (printf '%s ■ %s' "$state_since" "$display") "$pane_id" "$window_index" "$window_name")
             else
-                set -a entries (printf 'idle\t%s\t%s\t%s\tgray\t%s\t%s' "$kind_sort_key" "$state_sort_key" "$console_kind" (printf '%s ■ %s' "$state_since" "$display") "$pane_id")
+                set -a entries (printf 'idle\t%s\t%s\t%s\tgray\t%s\t%s\t%s\t%s' "$kind_sort_key" "$state_sort_key" "$console_kind" (printf '%s ■ %s' "$state_since" "$display") "$pane_id" "$window_index" "$window_name")
             end
 
             if test "$window_id" = "$sidebar_window_id"; and test "$is_codex_console" = 1
@@ -725,42 +782,77 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             end
         end
 
-        # ===== Section 4: pane 一覧の sort + 行レンダリング =====
-        # entries を bucket (working → waiting → idle) と sort_key 順に並べ、
-        # 各行を pane 幅で trim + 色付けして $lines に append する。
+        # ===== Section 4: window 単位 group 化 + bucket sort + 行レンダリング =====
+        # entries を window_index 昇順でグルーピングし、各 window の先頭に
+        # `-- window_name --` ヘッダ (時間表示なし) を挿入する。
+        # window 内では従来の bucket (working → waiting → idle) × state_since 順を維持。
         # 全角文字を含むタイトルでも sidebar 内で折り返さないよう pane 幅に合わせて切る。
         set -l pane_width (tmux display-message -p -t "$TMUX_PANE" '#{pane_width}' 2>/dev/null)
         set -l pane_height (tmux display-message -p -t "$TMUX_PANE" '#{pane_height}' 2>/dev/null)
         set -l max_line_chars (__ai_sidebar_max_line_chars "$pane_width")
         set -l llm_bg_color 2a2a44
-        for bucket in working waiting idle
-            for item in (printf '%s\n' $entries | sort -r)
-                set -l row_parts (string split -m 6 \t -- "$item")
-                set -l row_bucket $row_parts[1]
-                set -l row_kind $row_parts[4]
-                set -l row_color $row_parts[5]
-                set -l row_text $row_parts[6]
-                set -l row_target $row_parts[7]
-                test "$row_bucket" = "$bucket"; or continue
 
-                set -l short_row (string shorten -m $max_line_chars -- "$row_text")
-                # fish の cartesian 展開で `" "$color_prefix...` が 0 要素にならないよう、
-                # 空でも 1 要素 (空文字) を保つ。
-                set -l color_prefix ""
-                if test "$row_kind" = llm
-                    set color_prefix (set_color -b $llm_bg_color)
+        # entries から window_index の昇順 unique 一覧を得る
+        set -l window_keys
+        for item in $entries
+            set -l row_parts (string split -m 8 \t -- "$item")
+            test (count $row_parts) -ge 8; or continue
+            set -a window_keys $row_parts[8]
+        end
+        set window_keys (printf '%s\n' $window_keys | sort -un)
+
+        for window_index in $window_keys
+            # この window の entries だけ集め、window_name を 1 件目から拾う
+            set -l window_entries
+            set -l window_name_local
+            for item in $entries
+                set -l row_parts (string split -m 8 \t -- "$item")
+                test (count $row_parts) -ge 9; or continue
+                test "$row_parts[8]" = "$window_index"; or continue
+                set -a window_entries $item
+                test -z "$window_name_local"; and set window_name_local $row_parts[9]
+            end
+            test (count $window_entries) -gt 0; or continue
+
+            # window header (時間表示なし、クリック target は空 = 切替なし)
+            # NOTE: fish builtin printf は format 文字列の先頭 `--` を options
+            # terminator と解釈するので、`printf -- '-- %s --'` だと window 名が
+            # 落ちる。`%s` のみで format して中身を埋め込むこと。
+            set -l header_text (printf '%s' "-- $window_name_local --")
+            set -l header_short (string shorten -m $max_line_chars -- "$header_text")
+            set -a lines (set_color --bold)$header_short(set_color normal)
+            set -a line_texts "$header_short"
+            set -a line_targets ""
+
+            for bucket in working waiting idle
+                for item in (printf '%s\n' $window_entries | sort -r)
+                    set -l row_parts (string split -m 8 \t -- "$item")
+                    set -l row_bucket $row_parts[1]
+                    set -l row_kind $row_parts[4]
+                    set -l row_color $row_parts[5]
+                    set -l row_text $row_parts[6]
+                    set -l row_target $row_parts[7]
+                    test "$row_bucket" = "$bucket"; or continue
+
+                    set -l short_row (string shorten -m $max_line_chars -- "$row_text")
+                    # fish の cartesian 展開で `" "$color_prefix...` が 0 要素にならないよう、
+                    # 空でも 1 要素 (空文字) を保つ。
+                    set -l color_prefix ""
+                    if test "$row_kind" = llm
+                        set color_prefix (set_color -b $llm_bg_color)
+                    end
+                    if test "$row_color" = yellow
+                        set -a lines " "$color_prefix(set_color yellow)$short_row(set_color normal)
+                    else if test "$row_color" = green
+                        set -a lines " "$color_prefix(set_color green)$short_row(set_color normal)
+                    else if test "$row_color" = gray
+                        set -a lines " "(set_color 666666)$short_row(set_color normal)
+                    else
+                        set -a lines " "$color_prefix$short_row(set_color normal)
+                    end
+                    set -a line_texts " "$short_row
+                    set -a line_targets "$row_target"
                 end
-                if test "$row_color" = yellow
-                    set -a lines " "$color_prefix(set_color yellow)$short_row(set_color normal)
-                else if test "$row_color" = green
-                    set -a lines " "$color_prefix(set_color green)$short_row(set_color normal)
-                else if test "$row_color" = gray
-                    set -a lines " "(set_color 666666)$short_row(set_color normal)
-                else
-                    set -a lines " "$color_prefix$short_row(set_color normal)
-                end
-                set -a line_texts " "$short_row
-                set -a line_targets "$row_target"
             end
         end
 

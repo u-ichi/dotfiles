@@ -183,7 +183,7 @@ if command -v jq >/dev/null 2>&1; then
 {"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_a6","name":"TaskUpdate","input":{"taskId":"3","status":"in_progress"}}]}}
 {"type":"user","message":{"content":[{"tool_use_id":"toolu_a6","type":"tool_result","content":"Updated"}]},"toolUseResult":{"success":true,"taskId":"3","updatedFields":["status"]}}
 CLAUDE_JSONL
-  if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; set lines (__ai_claude_task_lines '$claude_task_file' 80 20); test \"\$lines[1]\" = 'Goal: sidebar 復旧'; and test \"\$lines[2]\" = '> 1/2 #1 親タスクで原因調査'; and test \"\$lines[3]\" = '  ✓ [#1系] 子タスクで実装'; and test \"\$lines[4]\" = '  > [#1系] 子タスク2 で検証'"; then
+  if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; set green (set_color green); set normal (set_color normal); set lines (__ai_claude_task_lines '$claude_task_file' 80 20); test \"\$lines[1]\" = 'Goal: sidebar 復旧'; and test \"\$lines[2]\" = \"\$green▶ 1/2 親タスクで原因調査\$normal\"; and test \"\$lines[3]\" = '  ✓ 子タスクで実装'; and test \"\$lines[4]\" = \"\$green  ▶ 子タスク2 で検証\$normal\""; then
     echo "ERROR: Claude task tree lines are invalid" >&2
     fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; __ai_claude_task_lines '$claude_task_file' 80 20" >&2 || true
     exit 1
