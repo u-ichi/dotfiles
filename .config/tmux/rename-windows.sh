@@ -26,6 +26,10 @@ detect_name() {
 # 各 window の active pane を調べて rename。
 # AI sidebar pane が active の場合は、最初の通常 pane を window 名の判定に使う。
 while IFS= read -r win_id; do
+    # 手動命名 (prefix + ,) でピン留めされた window は自動 rename しない。
+    # マーカーは window option @manual_name。解除は prefix + M-, (tmux.conf)。
+    manual=$(tmux show-options -wqv -t "$win_id" @manual_name 2>/dev/null)
+    [[ "$manual" == "1" ]] && continue
     pane_pid=$(
         tmux list-panes -t "$win_id" -F '#{pane_pid}	#{@ai_sidebar}	#{pane_active}' 2>/dev/null \
             | awk -F '\t' '$2 != "1" && $3 == "1" { print $1; found=1; exit } $2 != "1" && first == "" { first=$1 } END { if (!found && first != "") print first }'
