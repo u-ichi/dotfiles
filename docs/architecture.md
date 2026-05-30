@@ -15,9 +15,13 @@
 │   ├── symlink.sh              #   symlink 作成関数 (links.conf を読み込む)
 │   ├── docker.sh               #   Docker Desktop 自動起動の有効化
 │   ├── defaults.sh             #   macOS defaults の適用
-│   └── aws.sh                  #   AWS config を config.d パターンで組み立て
+│   ├── aws.sh                  #   AWS config を config.d パターンで組み立て
+│   ├── hermes.sh               #   Hermes Agent (x_search) の明示導入補助
+│   ├── gws.sh                  #   Google Workspace CLI (gws) の明示導入・更新補助
+│   └── python.sh               #   uv ベースの Python automation tools (Pythonfile) 同期
 ├── Brewfile                    # Homebrew パッケージ・cask 定義
-├── Npmfile                     # npm グローバルパッケージ定義 (任意)
+├── Npmfile                     # npm グローバルパッケージ定義 (goalbuddy 等)
+├── Pythonfile                  # uv 経由で導入する Python パッケージ定義 (python-pptx 等)
 ├── .config/
 │   ├── fish/                   # Fish Shell 設定
 │   │   ├── config.fish         #   メイン設定 (PATH, alias)
@@ -62,8 +66,8 @@ dotfiles 側では扱わない。詳細は claude.codex の `install.sh` と `do
 
 | スクリプト | 役割 |
 |-----------|------|
-| `install.sh` | 初回セットアップ。Brewfile 適用、symlink 作成、Git ローカル設定の対話的入力、Claude Code / mkcert / Fisher / Terraform のインストール、macOS defaults 適用 |
-| `update.sh` | 日常運用。symlink 再同期、AWS 設定の再展開、`brew bundle` + `brew upgrade`、Terraform 最新化、Npmfile からの `npm i -g` |
+| `install.sh` | 初回セットアップ。Brewfile 適用、symlink 作成、Git ローカル設定の対話的入力、Claude Code / mkcert / Fisher / Terraform / Python tools のインストール、macOS defaults 適用。第 1 引数で MODE (`hermes` / `gws` / `python`) を指定するとそのモジュールだけ再実行する |
+| `update.sh` | 日常運用。symlink 再同期、AWS 設定の再展開、`brew bundle` + `brew upgrade`、Terraform 最新化、Npmfile からの `npm i -g` + GoalBuddy update / agents / extension 維持、Pythonfile を uv で同期。第 1 引数で MODE (`hermes` / `gws` / `python` / `npm`) を指定するとそのモジュールだけ再実行する |
 | `lint.sh` | ShellCheck (Bash) / `fish --no-execute` / tmux isolated smoke test / taplo (TOML) / `python3 -m json.tool` (JSON) を実行。GitHub Actions でも同等の静的チェックが走る |
 | `.config/tmux/rename-windows.sh` | tmux window 名を active な通常 pane のプロセス名から更新する。AI sidebar pane が active の場合は最初の通常 pane を基準にする |
 | `.config/tmux/ensure-ai-sidebars.sh` | 各 tmux window に AI pane 一覧 sidebar が無ければ作成する。既存 sidebar の kill / resize は行わない |
@@ -73,6 +77,23 @@ dotfiles 側では扱わない。詳細は claude.codex の `install.sh` と `do
 | `.config/tmux/test-ai-sidebars-isolated.sh` | 専用 socket の disposable tmux server だけを使い、sidebar 既定有効化と新規 window hook を検証する |
 
 `install.sh` と `update.sh` は冪等。何度実行しても安全。
+
+## 補助モジュールと MODE 引数
+
+install.sh / update.sh は `lib/<name>.sh` を source して関数を組み立て、第 1 引数の MODE
+で個別実行を切り替える。MODE 未指定 (= `all`) ではメインフローが全モジュールを順に呼ぶ。
+
+| MODE | install.sh | update.sh |
+|------|-----------|-----------|
+| (none / `all`) | 全モジュールを順に走らせる | 全モジュールを順に走らせる |
+| `hermes` | `ensure_hermes` (公式 installer 取得 → 実行) | `ensure_hermes` |
+| `gws` | `ensure_gws` (brew install googleworkspace-cli) | `update_gws` (brew outdated 判定) |
+| `python` | `ensure_python_tools` (uv venv + Pythonfile) | `ensure_python_tools` |
+| `npm` | — (install.sh では未対応) | `update_npm_globals` (Npmfile + goalbuddy 一式) |
+
+各モジュールは個別失敗が他に波及しないよう、`lib/<name>.sh` 内で必要なツールの有無
+(`command -v`) を先頭で確認する。`Brewfile` には依存ツール (uv / googleworkspace-cli /
+ffmpeg) を明示し、`Npmfile` / `Pythonfile` は各 lib/ が読む形式で行単位パッケージを列挙する。
 
 ## tmux AI pane navigation
 
