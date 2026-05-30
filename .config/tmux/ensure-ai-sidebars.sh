@@ -2,7 +2,7 @@
 # 各 tmux window の左端に AI pane 一覧 sidebar が無ければ作成する。
 set -u
 
-width="${1:-26}"
+width="${1:-32}"
 min_width=$((width + 40))
 # sidebar_version は ai-panes-sidebar.fish の state_version を権威ソースとして自動同期する。
 # 関数ロジック変更時の live 反映 (respawn-pane) 漏れを防ぐため hard-code しない。
