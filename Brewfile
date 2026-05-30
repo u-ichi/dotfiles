@@ -96,6 +96,10 @@ cask 'bitwarden'
 cask 'caffeine'
 cask 'istat-menus'
 cask 'karabiner-elements'
+# 通知バナー位置変更アプリ。公式 1.4.0 は macOS 26.4.1 必須のため、現行 26.3 で動く
+# sk0gen フォーク (個人 tap で管理) を使用。非 notarize のため初回起動時に
+# システム設定 > プライバシーとセキュリティで「このまま開く」が必要
+cask 'u-ichi/tap/pingplace'
 cask 'tailscale-app'
 
 # === GUI: その他 ===
