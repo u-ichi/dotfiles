@@ -68,6 +68,7 @@ function __ai_codex_plan_lines --argument-names session_file max_line_chars max_
         (.payload.arguments | fromjson? | .explanation // "")
         | select(. != "")
     ' 2>/dev/null)
+    set -l native_goal_status (__ai_codex_native_goal_status "$session_file")
 
     set -l plan_rows (printf '%s\n' "$plan_event" | command jq -r '
         (.payload.arguments | fromjson? | .plan // [])
@@ -122,12 +123,19 @@ function __ai_codex_plan_lines --argument-names session_file max_line_chars max_
     test (count $display_rows) -gt 0; or return 1
 
     set -l remaining "$max_display_lines"
-    if test -n "$goal_line"
-        if string match -qr '^\s*(Goal|目標):' -- "$goal_line"
-            printf '%s\n' (string shorten -m $max_line_chars -- "$goal_line")
-        else
-            printf '%s\n' (string shorten -m $max_line_chars -- (printf 'Goal: %s' "$goal_line"))
+    # explanation は task-progress-async.md の規約上 `Goal:` / `目標:` で始まる形で
+    # 書かれる前提。この形で始まる時だけ上位目標として Goal 行に描画する。
+    # 「Goal は作らず、この発話の短期ゴールとして…します」のような地の文 explanation は
+    # 規約を満たさないため Goal 行に昇格させない (昇格させると `Goal: Goal は作らず…` の
+    # ように二重化し意味不明になる)。
+    if test -n "$goal_line"; and string match -qr '^\s*(Goal|目標):' -- "$goal_line"
+        set -l goal_color (set_color yellow)
+        if test -n "$native_goal_status"
+            set goal_color (set_color --bold cyan)
         end
+        set -l goal_reset (set_color normal)
+        set -l shortened_goal (string shorten -m $max_line_chars -- "$goal_line")
+        printf '%s%s%s\n' "$goal_color" "$shortened_goal" "$goal_reset"
         set remaining (math "$remaining - 1")
     end
 
@@ -216,6 +224,36 @@ function __ai_codex_session_path --argument-names session_id
     set -l sessions_dir "$HOME/.codex/sessions"
     test -d "$sessions_dir"; or return 1
     command find "$sessions_dir" -type f -name "rollout-*-$session_id.jsonl" -mtime -7 2>/dev/null | command head -n 1
+end
+
+function __ai_codex_session_id_from_file --argument-names session_file
+    test -f "$session_file"; or return 1
+
+    set -l session_id
+    if command -q jq
+        set session_id (command head -n 1 "$session_file" | command jq -r 'select(.type == "session_meta") | .payload.id // empty' 2>/dev/null)
+    end
+    if test -z "$session_id"
+        set -l name (basename "$session_file")
+        set -l match (string match -r '^rollout-.*-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$' -- "$name")
+        if test (count $match) -ge 2
+            set session_id "$match[2]"
+        end
+    end
+
+    string match -qr '^[0-9a-f-]+$' -- "$session_id"; and printf '%s\n' "$session_id"
+end
+
+function __ai_codex_native_goal_status --argument-names session_file
+    command -q sqlite3; or return 1
+    set -l session_id (__ai_codex_session_id_from_file "$session_file")
+    test -n "$session_id"; or return 1
+
+    set -l db "$HOME/.codex/goals_1.sqlite"
+    test -f "$db"; or return 1
+
+    set -l escaped_id (string replace -a "'" "''" -- "$session_id")
+    command sqlite3 "$db" "select status from thread_goals where thread_id = '$escaped_id' limit 1;" 2>/dev/null | command head -n 1
 end
 
 function __ai_claude_task_lines --argument-names session_file max_line_chars max_display_lines
@@ -686,7 +724,9 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
     # v24: Goal 表示を「最初の goal 固定」→「最新 goal で上書き」に変更 (goal 切替を反映)。
     # v25: 通知 message に確認待ち理由 / 完了 detail を含める。
     # v26: 通知 detail 抽出を stdin 非依存にし、writer loop の read 待ち停止を防ぐ。
-    set -l state_version 26
+    # v27: Codex plan の Goal 行を native goal 有無で色分けする。
+    # v28: Codex plan の Goal 行を `Goal:` / `目標:` 始まりの explanation のみに限定 (地の文を昇格させない)。
+    set -l state_version 28
     while true
         # ===== Section 1: 初期化 (loop 毎の状態リセット) =====
         set -l lines

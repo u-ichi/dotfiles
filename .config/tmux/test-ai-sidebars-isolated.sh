@@ -80,6 +80,7 @@ mkdir -p "$TEST_HOME/.config/fish/functions"
 ln -s "$SCRIPT_DIR" "$TEST_HOME/.config/tmux"
 ln -s "$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish" "$TEST_HOME/.config/fish/functions/ai-panes-sidebar.fish"
 export HOME="$TEST_HOME"
+export TERM=xterm-256color
 
 tmux_i new-session -d -s ai-sidebar-test -n first -x 120 -y 30 'sleep 60'
 tmux_i source-file "$SCRIPT_DIR/tmux.conf"
@@ -171,7 +172,7 @@ fi
 if command -v jq >/dev/null 2>&1; then
   plan_file="$SOCKET_DIR/codex-plan.jsonl"
   printf '%s\n' '{"name":"update_plan","payload":{"arguments":"{\"explanation\":\"Goal: tmux sidebar に Goal を表示する\",\"plan\":[{\"step\":\"Task: 古い作業\",\"status\":\"completed\"},{\"step\":\"SubTask: 古い確認\",\"status\":\"completed\"},{\"step\":\"Task: plan 表示を直す\",\"status\":\"in_progress\"},{\"step\":\"SubTask: plan を読む\",\"status\":\"completed\"},{\"step\":\"SubTask: Goal 行を出す\",\"status\":\"in_progress\"},{\"step\":\"SubTask: live 表示を確認する\",\"status\":\"pending\"}]}"}}' > "$plan_file"
-  if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; set lines (__ai_codex_plan_lines '$plan_file' 80 20); test \"\$lines[1]\" = 'Goal: tmux sidebar に Goal を表示する'; and test \"\$lines[2]\" = '✓ 1/1 古い作業'; and test \"\$lines[3]\" = '> 1/3 plan 表示を直す'; and test \"\$lines[4]\" = '  ✓ plan を読む'; and test \"\$lines[5]\" = '  > Goal 行を出す'; and test \"\$lines[6]\" = '  - live 表示を確認する'"; then
+  if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; set yellow (set_color yellow); set lines (__ai_codex_plan_lines '$plan_file' 80 20); string match -q \"\$yellow*Goal: tmux sidebar に Goal を表示する*\" -- \"\$lines[1]\"; and test \"\$lines[2]\" = '✓ 1/1 古い作業'; and test \"\$lines[3]\" = '> 1/3 plan 表示を直す'; and test \"\$lines[4]\" = '  ✓ plan を読む'; and test \"\$lines[5]\" = '  > Goal 行を出す'; and test \"\$lines[6]\" = '  - live 表示を確認する'"; then
     echo "ERROR: Codex plan goal lines are invalid" >&2
     fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; __ai_codex_plan_lines '$plan_file' 80 20" >&2 || true
     exit 1
@@ -195,6 +196,19 @@ if command -v jq >/dev/null 2>&1; then
     echo "ERROR: Codex multiple task tree lines are invalid" >&2
     fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; __ai_codex_plan_lines '$many_tasks_plan_file' 80 20" >&2 || true
     exit 1
+  fi
+
+  if command -v sqlite3 >/dev/null 2>&1; then
+    native_goal_file="$SOCKET_DIR/rollout-2026-05-30T12-00-00-11111111-2222-3333-4444-555555555555.jsonl"
+    mkdir -p "$TEST_HOME/.codex"
+    sqlite3 "$TEST_HOME/.codex/goals_1.sqlite" "create table thread_goals (thread_id text primary key not null, goal_id text not null, objective text not null, status text not null, token_budget integer, tokens_used integer not null default 0, time_used_seconds integer not null default 0, created_at_ms integer not null, updated_at_ms integer not null);"
+    sqlite3 "$TEST_HOME/.codex/goals_1.sqlite" "insert into thread_goals (thread_id, goal_id, objective, status, created_at_ms, updated_at_ms) values ('11111111-2222-3333-4444-555555555555', 'goal-1', 'native goal smoke', 'active', 0, 0);"
+    printf '%s\n' '{"type":"session_meta","payload":{"id":"11111111-2222-3333-4444-555555555555"}}' '{"name":"update_plan","payload":{"arguments":"{\"explanation\":\"Goal: native goal 色分け\",\"plan\":[{\"step\":\"Task: 表示を確認する\",\"status\":\"in_progress\"}]}"}}' > "$native_goal_file"
+    if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; set native (set_color --bold cyan); set lines (__ai_codex_plan_lines '$native_goal_file' 80 20); string match -q \"\$native*Goal: native goal 色分け*\" -- \"\$lines[1]\"; and test \"\$lines[2]\" = '> 表示を確認する'"; then
+      echo "ERROR: Codex native goal color is invalid" >&2
+      fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; __ai_codex_plan_lines '$native_goal_file' 80 20" >&2 || true
+      exit 1
+    fi
   fi
 
   # Claude TaskList tree: TaskCreate + TaskUpdate event stream を逐次再生して最新 state を出す。
