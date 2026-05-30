@@ -17,8 +17,8 @@ OAuth token は Hermes が `~/.hermes/auth.json` に保存する。これは機�
 
 ## 導入
 
-通常の `install.sh` では Hermes を自動導入しない。
-導入する場合だけ、明示的に次を実行する。
+通常の `install.sh` では Hermes も含めて同期する。
+Hermes だけを導入・再確認する場合は、明示的に次を実行する。
 
 ```bash
 ./install.sh hermes

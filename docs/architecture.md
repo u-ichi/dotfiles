@@ -66,7 +66,7 @@ dotfiles 側では扱わない。詳細は claude.codex の `install.sh` と `do
 
 | スクリプト | 役割 |
 |-----------|------|
-| `install.sh` | 初回セットアップと日常更新の単一エントリポイント。Brewfile 適用 / 更新、設定ファイルコピー、Git ローカル設定の対話的入力、AWS 設定の再展開、Claude Code / mkcert / Fisher / Terraform / npm / Python tools の同期、macOS defaults 適用を行う。第 1 引数で MODE (`hermes` / `gws` / `python` / `npm` / `fish`) を指定するとそのモジュールだけ再実行する |
+| `install.sh` | 初回セットアップと日常更新の単一エントリポイント。Brewfile 適用 / 更新、Hermes Agent 導入、設定ファイルコピー、Git ローカル設定の対話的入力、AWS 設定の再展開、Claude Code / mkcert / Fisher / Terraform / npm / Python tools の同期、macOS defaults 適用を行う。第 1 引数で MODE (`hermes` / `gws` / `python` / `npm` / `fish`) を指定するとそのモジュールだけ再実行する |
 | `lint.sh` | ShellCheck (Bash) / `fish --no-execute` / tmux isolated smoke test / taplo (TOML) / `python3 -m json.tool` (JSON) を実行。GitHub Actions でも同等の静的チェックが走る |
 | `.config/tmux/rename-windows.sh` | tmux window 名を active な通常 pane のプロセス名から更新する。AI sidebar pane が active の場合は最初の通常 pane を基準にする |
 | `.config/tmux/ensure-ai-sidebars.sh` | 各 tmux window に AI pane 一覧 sidebar が無ければ作成する。既存 sidebar の kill / resize は行わない |
@@ -82,10 +82,15 @@ dotfiles 側では扱わない。詳細は claude.codex の `install.sh` と `do
 `install.sh` は `lib/<name>.sh` を source して関数を組み立て、第 1 引数の MODE
 で個別実行を切り替える。MODE 未指定 (= `all`) ではメインフローが全モジュールを順に呼ぶ。
 
+MODE を追加・変更する場合、認証情報や手動ログインなど repo 管理外の state を除き、
+その MODE が導入・同期する実体は必ず `all` フローにも含める。`all` から外す必要がある
+処理は、破壊的・対話必須・機密情報生成などの理由をこの節に明記し、MODE 表にも例外として
+記録する。専用 MODE だけで導入でき、引数無し `./install.sh` では導入されない実装は禁止。
+
 | MODE | 内容 |
 |------|------|
-| (none / `all`) | 全モジュールを順に走らせる |
-| `hermes` | `ensure_hermes` (公式 installer 取得 → 実行) |
+| (none / `all`) | 全モジュールを順に走らせる。以下の専用 MODE の導入・同期内容をすべて含める |
+| `hermes` | `ensure_hermes` (公式 installer 取得 → 実行) と `x-search.fish` 同期 |
 | `gws` | `update_gws` (未導入なら install、導入済みなら brew outdated 判定) |
 | `python` | `ensure_python_tools` (uv venv + Pythonfile) |
 | `npm` | `update_npm_globals` (Npmfile) |

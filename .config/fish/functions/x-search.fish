@@ -1,6 +1,6 @@
 function x-search --description 'Hermes Agent x_search で X を検索する'
     if not command -q hermes
-        echo "hermes が見つかりません。dotfiles で導入する場合は ./install.sh hermes または ./update.sh hermes を実行してください。" >&2
+        echo "hermes が見つかりません。dotfiles で導入する場合は ./install.sh または ./install.sh hermes を実行してください。" >&2
         return 127
     end
 

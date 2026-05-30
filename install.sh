@@ -133,6 +133,11 @@ echo ""
 # === Homebrew ===
 sync_homebrew
 
+# === Hermes Agent ===
+echo "--- Hermes Agent ---"
+ensure_hermes
+echo ""
+
 # === 設定ファイルコピー ===
 echo "--- 設定ファイルコピー ---"
 sync_files
@@ -160,6 +165,11 @@ echo ""
 # === AWS config ===
 echo "--- AWS config ---"
 assemble_aws_config
+echo ""
+
+# === Google Workspace CLI ===
+echo "--- Google Workspace CLI ---"
+update_gws
 echo ""
 
 # === Claude Code (ネイティブインストーラー) ===
