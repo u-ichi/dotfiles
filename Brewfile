@@ -38,6 +38,7 @@ brew 'shellcheck'
 brew 'shfmt'
 brew 'sqlite'
 brew 'taplo'
+brew 'uv'
 brew 'yq'
 
 # === CLI: システム・ユーティリティ ===

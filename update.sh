@@ -11,6 +11,7 @@ source "$SCRIPT_DIR/lib/aws.sh"
 source "$SCRIPT_DIR/lib/terraform.sh"
 source "$SCRIPT_DIR/lib/hermes.sh"
 source "$SCRIPT_DIR/lib/gws.sh"
+source "$SCRIPT_DIR/lib/python.sh"
 
 MODE="${1:-all}"
 
@@ -24,6 +25,12 @@ fi
 if [ "$MODE" = "gws" ]; then
   echo "=== Google Workspace CLI 更新 ==="
   update_gws
+  echo "完了しました"
+  exit 0
+fi
+
+if [ "$MODE" = "python" ]; then
+  ensure_python_tools
   echo "完了しました"
   exit 0
 fi
@@ -79,5 +86,8 @@ if [ -f "$NPMFILE" ] && command -v npm &>/dev/null; then
   done < "$NPMFILE"
   echo ""
 fi
+
+# === Python automation packages ===
+ensure_python_tools
 
 echo "完了しました"

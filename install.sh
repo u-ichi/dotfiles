@@ -12,6 +12,7 @@ source "$SCRIPT_DIR/lib/aws.sh"
 source "$SCRIPT_DIR/lib/terraform.sh"
 source "$SCRIPT_DIR/lib/hermes.sh"
 source "$SCRIPT_DIR/lib/gws.sh"
+source "$SCRIPT_DIR/lib/python.sh"
 
 MODE="${1:-all}"
 
@@ -25,6 +26,12 @@ fi
 if [ "$MODE" = "gws" ]; then
   echo "=== Google Workspace CLI セットアップ ==="
   ensure_gws
+  echo "完了しました"
+  exit 0
+fi
+
+if [ "$MODE" = "python" ]; then
+  ensure_python_tools
   echo "完了しました"
   exit 0
 fi
@@ -107,6 +114,9 @@ mkcert -install 2>/dev/null || true
 echo "--- Terraform ---"
 ensure_terraform_latest
 echo ""
+
+# === Python automation packages ===
+ensure_python_tools
 
 # === Fisher プラグイン復元 ===
 echo "--- Fisher ---"
