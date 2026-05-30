@@ -72,9 +72,16 @@ restore_fisher_plugins() {
   echo ""
 }
 
+sync_hermes_files() {
+  echo "--- Hermes Agent 関連ファイル ---"
+  copy_item ".config/fish/functions/x-search.fish" "$HOME/.config/fish/functions/x-search.fish"
+  echo ""
+}
+
 if [ "$MODE" = "hermes" ]; then
   echo "=== Hermes Agent セットアップ ==="
   ensure_hermes
+  sync_hermes_files
   echo "完了しました"
   exit 0
 fi

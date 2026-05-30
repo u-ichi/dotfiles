@@ -164,7 +164,18 @@
                         "description": "tmux prefix: 日本語IME中の Ctrl+A を Ghostty で確実に届ける (英数モードに切り替えて Ctrl+A 送信。日本語に戻すのは右Cmd)",
                         "manipulators": [
                             {
-                                "type": "basic",
+                                "conditions": [
+                                    {
+                                        "input_sources": [{ "language": "ja" }],
+                                        "type": "input_source_if"
+                                    },
+                                    {
+                                        "bundle_identifiers": [
+                                            "^com\\.mitchellh\\.ghostty$"
+                                        ],
+                                        "type": "frontmost_application_if"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "a",
                                     "modifiers": {
@@ -174,18 +185,12 @@
                                 },
                                 "to": [
                                     { "key_code": "japanese_eisuu" },
-                                    { "key_code": "a", "modifiers": ["left_control"] }
-                                ],
-                                "conditions": [
                                     {
-                                        "type": "input_source_if",
-                                        "input_sources": [{ "language": "ja" }]
-                                    },
-                                    {
-                                        "type": "frontmost_application_if",
-                                        "bundle_identifiers": ["^com\\.mitchellh\\.ghostty$"]
+                                        "key_code": "a",
+                                        "modifiers": ["left_control"]
                                     }
-                                ]
+                                ],
+                                "type": "basic"
                             }
                         ]
                     }
@@ -193,34 +198,12 @@
             },
             "devices": [
                 {
-                    "disable_built_in_keyboard_if_exists": true,
-                    "identifiers": {
-                        "is_keyboard": true,
-                        "is_pointing_device": true,
-                        "product_id": 33398,
-                        "vendor_id": 9306
-                    },
-                    "ignore": false,
-                    "ignore_vendor_events": true,
-                    "manipulate_caps_lock_led": false
-                },
-                {
-                    "identifiers": {
-                        "is_keyboard": true,
-                        "product_id": 9760,
-                        "vendor_id": 6645
-                    },
-                    "treat_as_built_in_keyboard": true
+                    "identifiers": { "is_consumer": true },
+                    "ignore": false
                 }
             ],
             "name": "Default profile",
             "selected": true,
-            "simple_modifications": [
-                {
-                    "from": { "key_code": "caps_lock" },
-                    "to": [{ "key_code": "left_control" }]
-                }
-            ],
             "virtual_hid_keyboard": { "keyboard_type_v2": "ansi" }
         }
     ]
