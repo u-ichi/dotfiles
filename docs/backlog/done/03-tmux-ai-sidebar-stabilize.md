@@ -31,7 +31,7 @@ dotfiles の tmux AI sidebar 実装を、次セッションで一度整理して
   - `.config/tmux/ensure-ai-sidebars.sh`
   - `.config/tmux/rename-windows.sh`
   - `.config/tmux/tmux.conf`
-  - `links.conf`
+  - `copy.conf`
 - 直前に docs へ未確定設計を書こうとしたが取り下げ済み。docs は動作が固まってから書くこと。
 - live tmux に対して `select-window` / `select-pane` を伴う検証をするとユーザーの作業 window を飛ばす。dry-run か読み取りだけで検証すること。
 - `AI_SIDEBAR_CLICK_DRY_RUN=1` を使うと、`ai-sidebar-click.sh` は対象 pane を出力して終了する。focus を動かす検証は禁止。

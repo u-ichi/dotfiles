@@ -6,10 +6,10 @@ _normalize() { iconv -f utf-8-mac -t utf-8 2>/dev/null <<< "$1" || echo "$1"; }
 
 DOTFILES_DIR="$(_normalize "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)")"
 
-# links.conf からコピー定義を読み込む
-_load_links() {
-  local conf="$DOTFILES_DIR/links.conf"
-  LINKS=()
+# copy.conf からコピー定義を読み込む
+_load_copy_entries() {
+  local conf="$DOTFILES_DIR/copy.conf"
+  COPY_ENTRIES=()
   while IFS= read -r line; do
     # 空行・コメント行をスキップ
     [[ -z "${line// /}" || "$line" =~ ^[[:space:]]*# ]] && continue
@@ -19,10 +19,10 @@ _load_links() {
     # シェル変数を展開
     dest="${dest//\$HOME/$HOME}"
     dest="${dest//\$DOTFILES_DIR/$DOTFILES_DIR}"
-    LINKS+=("$src:$dest")
+    COPY_ENTRIES+=("$src:$dest")
   done < "$conf"
 }
-_load_links
+_load_copy_entries
 
 # コピー先の親ディレクトリが DOTFILES_DIR へのシンボリックリンクの場合、
 # 実ディレクトリに変換する（ディレクトリリンク → 実ファイルコピー移行用）
@@ -178,14 +178,9 @@ copy_item() {
 }
 
 sync_files() {
-  for entry in "${LINKS[@]}"; do
+  for entry in "${COPY_ENTRIES[@]}"; do
     local src="${entry%%:*}"
     local dest="${entry#*:}"
     copy_item "$src" "$dest"
   done
-}
-
-# 旧関数名との互換用。実処理は symlink ではなくコピー同期。
-sync_links() {
-  sync_files
 }

@@ -15,7 +15,7 @@ updated: 2026-05-30
 
 ## 概要
 
-Hermes Agent の `x_search` を `hermes -z` 経由で日常的に呼び出せるようにする。
+Hermes Agent の `x_search` を `hermes -t x_search -z` 経由で日常的に呼び出せるようにする。
 
 導入は dotfiles の管理範囲に収めるが、OAuth トークンや `~/.hermes/auth.json` は機密情報として
 リポジトリ管理しない。dotfiles では Hermes のインストール、薄い fish CLI、初回設定手順、
@@ -25,14 +25,14 @@ Hermes Agent の `x_search` を `hermes -z` 経由で日常的に呼び出せる
 
 - [x] Hermes Agent の導入前提と初回設定手順が dotfiles 内のドキュメントにまとまっている
   - 検証: `test -f docs/hermes-x-search.md`
-- [x] Hermes Agent を通常セットアップでは勝手にインストールせず、明示操作で導入できる補助導線がある
-  - 検証: `grep -R "ensure_hermes" lib install.sh update.sh`
+- [x] Hermes Agent を通常セットアップと明示操作の両方で導入・同期できる補助導線がある
+  - 検証: `grep -R "ensure_hermes" lib install.sh`
 - [x] Hermes Agent がこの環境にインストールされ、`hermes` コマンドが PATH から実行できる
   - 検証: `command -v hermes && hermes --version`
-- [x] X Search 用の fish CLI が追加され、`hermes -z` で `x_search` を使う指示を組み立てられる
+- [x] X Search 用の fish CLI が追加され、`hermes -t x_search -z` で `x_search` toolset を明示して使える
   - 検証: `fish --no-execute .config/fish/functions/x-search.fish`
-- [x] fish CLI が symlink 管理対象に含まれている
-  - 検証: `grep "x-search.fish" links.conf`
+- [x] fish CLI がコピー同期対象に含まれている
+  - 検証: `grep "x-search.fish" copy.conf`
 - [x] 既存 lint が通る
   - 検証: `./lint.sh`
 
@@ -40,10 +40,10 @@ Hermes Agent の `x_search` を `hermes -z` 経由で日常的に呼び出せる
 
 - [x] 公式情報と PDF の内容をもとに、Hermes / X Search の初回手順を `docs/hermes-x-search.md` にまとめる
 - [x] `lib/hermes.sh` を追加し、Hermes の存在確認と明示導入補助を実装する
-- [x] `install.sh` / `update.sh` に Hermes 導入補助の明示モードを追加する
-- [x] `./install.sh hermes` または `./update.sh hermes` で Hermes を実インストールする
+- [x] `install.sh` に Hermes 導入補助の明示モードを追加する
+- [x] `./install.sh hermes` で Hermes を実インストールする
 - [x] `.config/fish/functions/x-search.fish` を追加する
-- [x] `links.conf` に fish function の symlink 定義を追加する
+- [x] `copy.conf` に fish function のコピー定義を追加する
 - [x] lint と構文チェックを実行する
 
 ## Goal 実行
@@ -53,7 +53,7 @@ Hermes Agent の `x_search` を `hermes -z` 経由で日常的に呼び出せる
 - scope:
   - "Hermes 本体を通常セットアップでは自動インストールせず、backlog 実施中に明示操作で導入する"
   - "OAuth 認証情報は管理外にし、手順だけを docs に残す"
-  - "`x-search` fish function で `hermes -z` 経由の X Search 指示を実行できるようにする"
+  - "`x-search` fish function で `hermes -t x_search -z` 経由の X Search 指示を実行できるようにする"
   - "lint と fish 構文チェックで検証する"
 - stop_conditions:
   - "Hermes の実インストール、ローカル実装、検証が完了したら、backlog done / commit / push の承認待ちで停止する"
@@ -77,13 +77,13 @@ Hermes Agent の `x_search` を `hermes -z` 経由で日常的に呼び出せる
 
 - 初期作成。調査・導入補助・CLI 追加・検証までを 1 backlog で完走する計画にした。
 - Notion プロジェクト管理 DB に進行中 task として登録した。
-- `docs/hermes-x-search.md`、`lib/hermes.sh`、`x-search.fish`、`links.conf`、`install.sh`、`update.sh` を実装した。
+- `docs/hermes-x-search.md`、`lib/hermes.sh`、`x-search.fish`、`copy.conf`、`install.sh` を実装した。
 - `./lint.sh` と個別検証コマンドが通過した。Hermes OAuth 実ログインと X Search 実検索はユーザーのサブスク認証が必要なため手動確認として残した。
 
 ### 2026-05-18
 
 - backlog 04 の完了条件を再検証した。
-- `test -f docs/hermes-x-search.md`、`grep -R "ensure_hermes" lib install.sh update.sh`、`fish --no-execute .config/fish/functions/x-search.fish`、`grep "x-search.fish" links.conf`、`bash -n install.sh`、`bash -n update.sh`、`bash -n lib/hermes.sh`、`shellcheck -x lib/hermes.sh`、`./lint.sh` が通過した。
+- `test -f docs/hermes-x-search.md`、`grep -R "ensure_hermes" lib install.sh`、`fish --no-execute .config/fish/functions/x-search.fish`、`grep "x-search.fish" copy.conf`、`bash -n install.sh`、`bash -n lib/hermes.sh`、`shellcheck -x lib/hermes.sh`、`./lint.sh` が通過した。
 - 実インストールを未実施のまま残したのは backlog 目的に対して誤りだったため、完了条件を実インストール込みに修正した。
 - `./install.sh hermes` を実行し、Hermes Agent v0.14.0 を `/Users/u1/.hermes/hermes-agent` と `/Users/u1/.local/bin/hermes` にインストールした。
 - installer により `uv 0.11.14` と `ffmpeg 8.1.1` も導入された。`ffmpeg` は Brewfile に追加した。
@@ -96,10 +96,10 @@ Hermes Agent の `x_search` を `hermes -z` 経由で日常的に呼び出せる
 - 完了。成果物は commit `156254b` (✨ [untested] hermes: xAI OAuth 経由の x-search CLI を追加) で push 済、Lint CI run 26675880286 success。
 - ゴール条件 6 件すべて達成を再検証:
   - `test -f docs/hermes-x-search.md` → OK
-  - `ensure_hermes` 参照: `lib/hermes.sh:4`, `install.sh:13` (source + L17 MODE 分岐 で呼び出し), `update.sh:12` (source + L16 MODE 分岐 で呼び出し)
+  - `ensure_hermes` 参照: `lib/hermes.sh:4`, `install.sh:13` (source + MODE 分岐で呼び出し)
   - `hermes --version` → `Hermes Agent v0.14.0 (2026.5.16)` (`/Users/u1/.local/bin/hermes`)
   - `fish --no-execute .config/fish/functions/x-search.fish` → 構文 OK (silent)
-  - `links.conf` に `x-search.fish` シンボリックリンク行あり (commit 156254b で追加)
+  - `copy.conf` に `x-search.fish` コピー定義あり
   - `./lint.sh` → 本セッションで Lint CI run 26675880286 / 26676670383 ともに success
 - backlog file を `docs/backlog/done/` へ移動。
 
@@ -108,7 +108,6 @@ Hermes Agent の `x_search` を `hermes -z` 経由で日常的に呼び出せる
 - `docs/hermes-x-search.md`
 - `lib/hermes.sh`
 - `.config/fish/functions/x-search.fish`
-- `links.conf`
+- `copy.conf`
 - `install.sh`
-- `update.sh`
 - `.config/tmux/test-ai-sidebars-isolated.sh`（既存 lint 失敗の期待値更新）

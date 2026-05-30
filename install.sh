@@ -5,7 +5,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib/permissions.sh"
-source "$SCRIPT_DIR/lib/symlink.sh"
+source "$SCRIPT_DIR/lib/copy.sh"
 source "$SCRIPT_DIR/lib/defaults.sh"
 source "$SCRIPT_DIR/lib/docker.sh"
 source "$SCRIPT_DIR/lib/aws.sh"
@@ -47,7 +47,7 @@ sync_homebrew() {
 }
 
 sync_fish_files() {
-  for entry in "${LINKS[@]}"; do
+  for entry in "${COPY_ENTRIES[@]}"; do
     local src="${entry%%:*}"
     local dest="${entry#*:}"
     if [[ "$src" == .config/fish/* ]]; then

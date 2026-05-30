@@ -14,7 +14,7 @@ function x-search --description 'Hermes Agent x_search で X を検索する'
     end
 
     set -l query (string join ' ' -- $argv)
-    set -l prompt "x_search toolを使ってXを検索してください。検索クエリ: $query。回答は日本語で、要点、根拠、citations、credential_sourceを含めてください。"
+    set -l prompt "x_search toolを使ってXを検索してください。terminal、shell、xurl、web_search、browserは使わないでください。検索クエリ: $query。回答は日本語で、要点、根拠、citations、credential_source、degradedを含めてください。"
 
-    env HERMES_INFERENCE_PROVIDER=xai-oauth HERMES_INFERENCE_MODEL=grok-4.3 hermes --provider xai-oauth --model grok-4.3 -z "$prompt"
+    env HERMES_INFERENCE_PROVIDER=xai-oauth HERMES_INFERENCE_MODEL=grok-4.3 hermes --provider xai-oauth --model grok-4.3 -t x_search -z "$prompt"
 end

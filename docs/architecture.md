@@ -9,9 +9,9 @@
 .
 ├── install.sh                  # 初回セットアップ / 日常更新 (Brewfile + 設定ファイルコピー + brew/npm 更新)
 ├── lint.sh                     # ShellCheck / fish / taplo / json チェック
-├── links.conf                  # コピー定義 (ソース → コピー先の宣言)
+├── copy.conf                   # コピー定義 (ソース → コピー先の宣言)
 ├── lib/
-│   ├── symlink.sh              #   設定ファイルコピー関数 (links.conf を読み込む)
+│   ├── copy.sh                 #   設定ファイルコピー関数 (copy.conf を読み込む)
 │   ├── docker.sh               #   Docker Desktop 自動起動の有効化
 │   ├── defaults.sh             #   macOS defaults の適用
 │   ├── aws.sh                  #   AWS config を config.d パターンで組み立て
@@ -48,12 +48,11 @@
 ## 同期方式
 
 設定ファイルはこのリポジトリからホームディレクトリへ **コピー** する方式（Stow 等は不使用）。
-`links.conf` にソースとコピー先のペアを宣言し、`lib/symlink.sh` の `sync_files` が読み込む。
-既存の symlink 管理から移行するため、`lib/symlink.sh` というファイル名は互換のため残している。
+`copy.conf` にソースとコピー先のペアを宣言し、`lib/copy.sh` の `sync_files` が読み込む。
 
 | 対象 | 方式 | 理由 |
 |------|------|------|
-| 一般的な設定ファイル | コピー (`links.conf`) | `~/` 配下に実体を置き、リポジトリへの symlink 依存をなくす |
+| 一般的な設定ファイル | コピー (`copy.conf`) | `~/` 配下に実体を置き、リポジトリへの symlink 依存をなくす |
 | Fish Shell | 個別ファイル単位のコピー | `fisher` 等が自動生成するファイル (`fish_variables`, テーマ系) の repo 混入を防ぐ |
 | Fisher プラグイン | `fish_plugins` のみ追跡 + `fisher update` で復元 | プラグイン本体は upstream で管理されるため、リスト管理で十分 |
 | AWS config | `config.d/` のスニペットを連結して `~/.aws/config` に書き出す | プロファイルごとに分割管理しつつ、AWS CLI が読む単一ファイルを提供 |
@@ -205,17 +204,17 @@ tmux 設定や sidebar 挙動の検証では、default tmux server に対して 
 ## よくある落とし穴
 
 - **Google Drive 同期で実行権限が落ちる**: `install.sh` 冒頭で `chmod 755` を再付与している。手動で実行する前にエラーが出たら `bash` 経由で起動するか権限を再付与する
-- **Fisher プラグインの自動生成ファイルが repo に混入**: Fish の `functions/` を丸ごと管理すると bobthefish 等のテーマファイルが repo に書き込まれる。これを防ぐため個別ファイル単位でコピーしている（`links.conf` 参照）
+- **Fisher プラグインの自動生成ファイルが repo に混入**: Fish の `functions/` を丸ごと管理すると bobthefish 等のテーマファイルが repo に書き込まれる。これを防ぐため個別ファイル単位でコピーしている（`copy.conf` 参照）
 - **live tmux の sidebar 再作成で focus が動く**: sidebar pane の kill / recreate は通常 pane が active でも active pane を変える場合がある。live 検証では dry-run / 読み取りを優先し、再作成が必要な場合は現在 pane を記録して復元する
 
 ## macOS 固有の設定ファイルパス
 
 一部ツールは macOS で XDG (`~/.config/`) ではなく `~/Library/` 以下を既定の設定ファイル置き場にしている。
-リポジトリ内は XDG 風の `.config/<tool>/` に統一してツリー見通しを揃え、`links.conf` で OS 側の実パスへコピーする。
+リポジトリ内は XDG 風の `.config/<tool>/` に統一してツリー見通しを揃え、`copy.conf` で OS 側の実パスへコピーする。
 
 | ツール | macOS 既定の設定パス | 備考 |
 |-------|--------------------|------|
 | Ghostty | `~/Library/Application Support/com.mitchellh.ghostty/config` | アプリ bundle id ベース |
 | Glow | `~/Library/Preferences/glow/glow.yml` | `XDG_CONFIG_HOME` は無視される (確認済み、v2.1.2) |
 
-`~/.config/<tool>/` 配下に置いても読まれないツールがあるため、「リポジトリ内のパス」と「コピー先のパス」は必ずしも一致しない。`links.conf` の右辺が正となる。
+`~/.config/<tool>/` 配下に置いても読まれないツールがあるため、「リポジトリ内のパス」と「コピー先のパス」は必ずしも一致しない。`copy.conf` の右辺が正となる。

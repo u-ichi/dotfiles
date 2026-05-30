@@ -63,8 +63,8 @@ OAuth と `XAI_API_KEY` の両方がある場合、Hermes は OAuth を優先す
 x-search "OpenAI Codex CLI の直近アップデート"
 ```
 
-`x-search` は内部で `hermes -z` を使い、`x_search` tool を使うように指示する。
-出力では `citations` と `credential_source` を確認する。
+`x-search` は内部で `hermes -t x_search -z` を使い、oneshot 実行でも `x_search` toolset を明示する。
+出力では `citations`、`credential_source`、`degraded` を確認する。
 
 ## 検証
 
