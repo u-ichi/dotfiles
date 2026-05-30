@@ -44,6 +44,7 @@ fi
 target_pane="$target"
 case "$target_pane" in
   %*) ;;
+  @*) ;;
   ''|*[!0-9]*)
     session="$(tmux display-message -p -t "$mouse_pane" '#S' 2>/dev/null || true)"
     [ -z "$session" ] && exit 0

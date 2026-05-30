@@ -557,7 +557,10 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
     # v18: 状態遷移 (working→idle / →waiting) で統合デスクトップ通知を発火。
     # v19: window 単位で group 化、`-- window_name --` ヘッダを各 group の先頭に挿入。
     # v20: header の printf を `%s` ベースに修正 (fish printf の `--` options-terminator 問題)。
-    set -l state_version 20
+    # v21: window header を `-- name --` から `■ name` 形式に変更。
+    # v22: window header を左付け window_name のみ + クリックで select-window 対応 (entries に window_id を追加)。
+    # v23: is_writer 判定 bug 修正 (同 session の 2 つ目以降の sidebar pane が self-check skip されていた)。
+    set -l state_version 23
     while true
         # ===== Section 1: 初期化 (loop 毎の状態リセット) =====
         set -l lines
@@ -581,9 +584,12 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
         # show-option を打つより速い)。format string の field 数を変えたら、下の
         # `string split -m N` (parts 配列の総数 - 1) も合わせて更新すること。
         set -l raw (tmux list-panes -s -F '#{window_index}.#{pane_index}	#{pane_title}	#{@fixed_title}	#{@ai_base_title}	#{@ai_sidebar}	#{pane_current_path}	#{window_index}	#{@ai_display_index}	#{pane_current_command}	#{pane_id}	#{@ai_state}	#{@ai_state_since}	#{@ai_state_version}	#{pane_active}	#{window_id}	#{@ai_codex_started_at}	#{@ai_codex_session_file}	#{@ai_codex_cwd}	#{@ai_app}	#{@ai_claude_session_id}	#{@ai_claude_cwd}	#{window_name}' 2>/dev/null)
-        set -l writer_pane (tmux list-panes -s -F '#{pane_id}	#{@ai_sidebar}' 2>/dev/null | awk -F '\t' '$2 == "1" {print $1; exit}')
+        # 自分自身の @ai_sidebar を見て writer 判定する。
+        # 旧: session 内最初の writer だけ writer 認定 → 2 つ目以降の sidebar pane
+        # (window 2, 3, ... の writer) が is_writer=0 のまま動き、state_version self-check
+        # が走らず古いコードに固定される問題があった。
         set -l is_writer 0
-        test "$TMUX_PANE" = "$writer_pane"; and set is_writer 1
+        test (tmux show-options -p -t "$TMUX_PANE" -v @ai_sidebar 2>/dev/null) = "1"; and set is_writer 1
 
         # ===== Section 3: pane ごとの状態判定 + entries 構築 + active pane 識別 =====
         # 各 pane を iterate して以下を実施:
@@ -747,14 +753,14 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
 
             if test "$display_state" = waiting
                 set -l row (printf '%s ? %s' "$state_since" "$display")
-                set -a entries (printf 'waiting\t%s\t%s\t%s\tyellow\t%s\t%s\t%s\t%s' "$state_sort_key" "$kind_sort_key" "$console_kind" "$row" "$pane_id" "$window_index" "$window_name")
+                set -a entries (printf 'waiting\t%s\t%s\t%s\tyellow\t%s\t%s\t%s\t%s\t%s' "$state_sort_key" "$kind_sort_key" "$console_kind" "$row" "$pane_id" "$window_index" "$window_name" "$window_id")
             else if test "$display_state" = working
                 set -l row (printf '%s ▶ %s' "$state_since" "$display")
-                set -a entries (printf 'working\t%s\t%s\t%s\tgreen\t%s\t%s\t%s\t%s' "$state_sort_key" "$kind_sort_key" "$console_kind" "$row" "$pane_id" "$window_index" "$window_name")
+                set -a entries (printf 'working\t%s\t%s\t%s\tgreen\t%s\t%s\t%s\t%s\t%s' "$state_sort_key" "$kind_sort_key" "$console_kind" "$row" "$pane_id" "$window_index" "$window_name" "$window_id")
             else if test "$is_llm_console" = 1
-                set -a entries (printf 'idle\t%s\t%s\t%s\tnormal\t%s\t%s\t%s\t%s' "$kind_sort_key" "$state_sort_key" "$console_kind" (printf '%s ■ %s' "$state_since" "$display") "$pane_id" "$window_index" "$window_name")
+                set -a entries (printf 'idle\t%s\t%s\t%s\tnormal\t%s\t%s\t%s\t%s\t%s' "$kind_sort_key" "$state_sort_key" "$console_kind" (printf '%s ■ %s' "$state_since" "$display") "$pane_id" "$window_index" "$window_name" "$window_id")
             else
-                set -a entries (printf 'idle\t%s\t%s\t%s\tgray\t%s\t%s\t%s\t%s' "$kind_sort_key" "$state_sort_key" "$console_kind" (printf '%s ■ %s' "$state_since" "$display") "$pane_id" "$window_index" "$window_name")
+                set -a entries (printf 'idle\t%s\t%s\t%s\tgray\t%s\t%s\t%s\t%s\t%s' "$kind_sort_key" "$state_sort_key" "$console_kind" (printf '%s ■ %s' "$state_since" "$display") "$pane_id" "$window_index" "$window_name" "$window_id")
             end
 
             if test "$window_id" = "$sidebar_window_id"; and test "$is_codex_console" = 1
@@ -795,38 +801,39 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
         # entries から window_index の昇順 unique 一覧を得る
         set -l window_keys
         for item in $entries
-            set -l row_parts (string split -m 8 \t -- "$item")
+            set -l row_parts (string split -m 9 \t -- "$item")
             test (count $row_parts) -ge 8; or continue
             set -a window_keys $row_parts[8]
         end
         set window_keys (printf '%s\n' $window_keys | sort -un)
 
         for window_index in $window_keys
-            # この window の entries だけ集め、window_name を 1 件目から拾う
+            # この window の entries だけ集め、window_name と window_id を 1 件目から拾う
             set -l window_entries
             set -l window_name_local
+            set -l window_id_local
             for item in $entries
-                set -l row_parts (string split -m 8 \t -- "$item")
-                test (count $row_parts) -ge 9; or continue
+                set -l row_parts (string split -m 9 \t -- "$item")
+                test (count $row_parts) -ge 10; or continue
                 test "$row_parts[8]" = "$window_index"; or continue
                 set -a window_entries $item
-                test -z "$window_name_local"; and set window_name_local $row_parts[9]
+                if test -z "$window_name_local"
+                    set window_name_local $row_parts[9]
+                    set window_id_local $row_parts[10]
+                end
             end
             test (count $window_entries) -gt 0; or continue
 
-            # window header (時間表示なし、クリック target は空 = 切替なし)
-            # NOTE: fish builtin printf は format 文字列の先頭 `--` を options
-            # terminator と解釈するので、`printf -- '-- %s --'` だと window 名が
-            # 落ちる。`%s` のみで format して中身を埋め込むこと。
-            set -l header_text (printf '%s' "-- $window_name_local --")
+            # window header (左付け、時間表示なし、クリックで対象 window に切替)
+            set -l header_text "$window_name_local"
             set -l header_short (string shorten -m $max_line_chars -- "$header_text")
             set -a lines (set_color --bold)$header_short(set_color normal)
             set -a line_texts "$header_short"
-            set -a line_targets ""
+            set -a line_targets "$window_id_local"
 
             for bucket in working waiting idle
                 for item in (printf '%s\n' $window_entries | sort -r)
-                    set -l row_parts (string split -m 8 \t -- "$item")
+                    set -l row_parts (string split -m 9 \t -- "$item")
                     set -l row_bucket $row_parts[1]
                     set -l row_kind $row_parts[4]
                     set -l row_color $row_parts[5]
