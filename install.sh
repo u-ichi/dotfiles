@@ -46,6 +46,32 @@ sync_homebrew() {
   echo ""
 }
 
+sync_fish_files() {
+  for entry in "${LINKS[@]}"; do
+    local src="${entry%%:*}"
+    local dest="${entry#*:}"
+    if [[ "$src" == .config/fish/* ]]; then
+      copy_item "$src" "$dest"
+    fi
+  done
+}
+
+restore_fisher_plugins() {
+  echo "--- Fisher ---"
+  if command -v fish &>/dev/null; then
+    if fish -c "type -q fisher" 2>/dev/null; then
+      echo "更新:     Fisher プラグイン"
+      fish -c "fisher update"
+    else
+      echo "インストール: Fisher + プラグイン"
+      fish -c "curl -sL https://raw.githubusercontent.com/jorgebucaran/fisher/main/functions/fisher.fish | source && fisher update"
+    fi
+  else
+    echo "スキップ: fish がインストールされていません"
+  fi
+  echo ""
+}
+
 if [ "$MODE" = "hermes" ]; then
   echo "=== Hermes Agent セットアップ ==="
   ensure_hermes
@@ -72,9 +98,19 @@ if [ "$MODE" = "npm" ]; then
   exit 0
 fi
 
+if [ "$MODE" = "fish" ]; then
+  echo "=== Fish 設定同期 ==="
+  echo "--- Fish 設定ファイルコピー ---"
+  sync_fish_files
+  echo ""
+  restore_fisher_plugins
+  echo "完了しました"
+  exit 0
+fi
+
 if [ "$MODE" != "all" ]; then
   echo "エラー: 未知の MODE です: $MODE"
-  echo "利用可能: all, hermes, gws, python, npm"
+  echo "利用可能: all, hermes, gws, python, npm, fish"
   exit 1
 fi
 
@@ -154,18 +190,7 @@ update_npm_globals
 # === Python automation packages ===
 ensure_python_tools
 
-# === Fisher プラグイン復元 ===
-echo "--- Fisher ---"
-if command -v fish &>/dev/null; then
-  if fish -c "type -q fisher" 2>/dev/null; then
-    echo "済み:     fisher"
-  else
-    echo "インストール: Fisher + プラグイン"
-    fish -c "curl -sL https://raw.githubusercontent.com/jorgebucaran/fisher/main/functions/fisher.fish | source && fisher update"
-  fi
-else
-  echo "スキップ: fish がインストールされていません"
-fi
+restore_fisher_plugins
 
 # === macOS defaults ===
 echo "--- macOS defaults ---"

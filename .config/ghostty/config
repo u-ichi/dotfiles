@@ -50,6 +50,7 @@ keybind = ctrl+a>e=unbind
 keybind = global:cmd+backquote=toggle_visibility
 
 # === シェル統合 ===
+command = /opt/homebrew/bin/fish
 shell-integration = detect
 desktop-notifications = true
 

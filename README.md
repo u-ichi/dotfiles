@@ -20,6 +20,12 @@ cd dotfiles
 4. Claude Code / mkcert / Fisher を必要に応じてインストール
 5. macOS defaults を適用
 
+Fish 設定と Fisher プラグインだけを復元する場合:
+
+```bash
+./install.sh fish
+```
+
 ## 内部構成
 
 ディレクトリ構成、設定ファイルコピー方式など内部設計の詳細は
