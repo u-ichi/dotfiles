@@ -5,6 +5,7 @@ CLAUDE.local.md
 
 # Codex CLI
 .codex/worktrees/
+.agents/skills/
 
 # macOS
 .DS_Store
