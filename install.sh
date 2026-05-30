@@ -11,12 +11,20 @@ source "$SCRIPT_DIR/lib/docker.sh"
 source "$SCRIPT_DIR/lib/aws.sh"
 source "$SCRIPT_DIR/lib/terraform.sh"
 source "$SCRIPT_DIR/lib/hermes.sh"
+source "$SCRIPT_DIR/lib/gws.sh"
 
 MODE="${1:-all}"
 
 if [ "$MODE" = "hermes" ]; then
   echo "=== Hermes Agent セットアップ ==="
   ensure_hermes
+  echo "完了しました"
+  exit 0
+fi
+
+if [ "$MODE" = "gws" ]; then
+  echo "=== Google Workspace CLI セットアップ ==="
+  ensure_gws
   echo "完了しました"
   exit 0
 fi
