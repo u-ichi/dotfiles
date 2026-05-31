@@ -1,1 +1,4 @@
 # npm グローバルパッケージ
+@colbymchenry/codegraph
+# CodeGraph の npm shim が参照する macOS arm64 用 bundle
+@colbymchenry/codegraph-darwin-arm64
