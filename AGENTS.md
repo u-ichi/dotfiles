@@ -39,6 +39,11 @@ GitHub Actions (`push` / `PR` on `main`) でも同等のチェックが走る。
 
 ## アーキテクチャ
 
+**配置は symlink ではなく「コピー方式」**（`copy.conf` がソース→コピー先を宣言）。
+`.config/...` を編集しても、live (`~/...`) に反映されるのは
+`./install.sh`（または該当 MODE、例: fish だけなら `./install.sh fish`）で**再コピーした後**。
+repo 編集 = 即反映ではない。symlink 前提で「編集したから live も変わったはず」と判断しないこと。
+
 ディレクトリ構成、設定ファイルコピー方式、スクリプトの責務、Codex マネージドブロック方式の詳細は
 [`docs/architecture.md`](docs/architecture.md) を参照。
 

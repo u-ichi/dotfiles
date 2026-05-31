@@ -119,13 +119,22 @@ silent drop。比較時は `(.field | tostring)` で正規化されているか�
 
 ### 罠 4: writer pane は fish autoload で旧版を memory に抱える
 
+**前提（配置はコピー方式）**: この repo は symlink ではなく**コピー方式**
+(`copy.conf` / `docs/architecture.md` §同期方式)。repo の
+`.config/fish/functions/ai-panes-sidebar.fish` を編集しても、live writer が読むのは
+コピー先 `$HOME/.config/fish/functions/ai-panes-sidebar.fish` であり、**再コピーするまで
+何をしても反映されない**。self-version-check (下記) も `$HOME/.config/...` を読む。
+
 `ai-panes-sidebar.fish` を編集しても、live writer pane は古いコードを実行し続ける。
 反映には:
 
-1. `state_version` 変数を bump
+0. **先に `$HOME` へ再コピー**: `./install.sh fish`（または該当ファイルだけ `cp`）。
+   このコピーを飛ばすと以降の step は全て無意味になる。
+1. `state_version` 変数 (`set -l state_version <N>`, `ai-panes-sidebar` 関数内) を bump
 2. `.config/tmux/ensure-ai-sidebars.sh` を実行 (writer pane を respawn)
 
-または、writer 内蔵の self-version-check (v8 以降) が自動 re-exec する。
+または、step 0 + bump 後は writer 内蔵の self-version-check (v8 以降) が、コピー先ファイルの
+`state_version` と memory 上の値の差を検知して自動 re-exec する。
 
 ### 罠 5: subagent / sidechain の hook が pane option を上書き
 
