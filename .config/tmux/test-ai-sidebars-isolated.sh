@@ -174,6 +174,11 @@ if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; test
   exit 1
 fi
 
+if fish -c "source '$SCRIPT_DIR/../fish/functions/__ai_pane_title_sync.fish'; functions __ai_pane_title_sync_codex_watch" | grep -q 'exec command fish'; then
+  echo "ERROR: Codex title watcher reload must not spawn /usr/bin/command wrapper" >&2
+  exit 1
+fi
+
 if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; test (__ai_notify_detail waiting codex repo 'Would you like to run the following command?' 'Yes, proceed (y)') = 'コマンド実行の承認待ち · repo'; and test (__ai_notify_detail idle codex repo '• Worked for 1m 42s' '› 対処して') = '処理完了 (Worked for 1m 42s) · repo'; and test (__ai_notify_detail waiting claude repo 'Do you want to proceed?' '❯ 1. Yes') = 'Do you want to proceed? · repo'"; then
   echo "ERROR: AI notification detail extraction is invalid" >&2
   exit 1

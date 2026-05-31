@@ -145,7 +145,7 @@ function __ai_pane_title_sync_codex_watch --argument-names pane_id cwd started_a
         if test -n "$watch_mtime"
             set -l current_mtime (command stat -L -f %m "$function_path" 2>/dev/null; or command stat -L -c %Y "$function_path" 2>/dev/null)
             if test -n "$current_mtime"; and test "$current_mtime" != "$watch_mtime"
-                exec command fish -c 'source $argv[1]; __ai_pane_title_sync codex-watch $argv[2] $argv[3] $argv[4] $argv[5]' "$function_path" "$pane_id" "$cwd" "$started_at" "$fallback_title"
+                exec fish -c 'source $argv[1]; __ai_pane_title_sync codex-watch $argv[2] $argv[3] $argv[4] $argv[5]' "$function_path" "$pane_id" "$cwd" "$started_at" "$fallback_title"
             end
         end
 
