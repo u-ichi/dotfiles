@@ -137,6 +137,69 @@ function __codex_target_path
     __codex_physical_path "$path"
 end
 
+function __codex_agmsg_tmux_scope_join --argument-names project_path
+    if not set -q TMUX
+        return
+    end
+    if not set -q TMUX_PANE
+        return
+    end
+
+    set -l helper "$HOME/.config/tmux/agmsg-tmux-join.sh"
+    set -l skill_dir "$HOME/.agents/skills/agmsg"
+    if set -q AGMSG_SKILL_DIR
+        set skill_dir "$AGMSG_SKILL_DIR"
+    end
+    test -x "$helper"; or return
+    test -x "$skill_dir/scripts/join.sh"; or return
+
+    command "$helper" --type codex --target "$TMUX_PANE" --project-path "$project_path" --skip-delivery >/dev/null 2>&1
+end
+
+function __codex_export_agmsg_identity
+    if not set -q TMUX
+        return
+    end
+    if not set -q TMUX_PANE
+        return
+    end
+
+    set -gx AGMSG_TMUX_CURRENT_PANE "$TMUX_PANE"
+
+    set -l socket_path (tmux display-message -p -t "$TMUX_PANE" '#{socket_path}' 2>/dev/null)
+    if test -n "$socket_path"
+        set -gx AGMSG_TMUX_SOCKET "$socket_path"
+    end
+
+    set -l identity (tmux show-option -p -v -t "$TMUX_PANE" @agmsg_active_identity 2>/dev/null)
+    if test -n "$identity"
+        set -gx AGMSG_AGENT_ID "$identity"
+    end
+end
+
+function __codex_dotfiles_agent_add_dir --argument-names launch_pwd target_path
+    set -l common_dir (git -C "$target_path" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
+    if test $status -ne 0
+        return
+    end
+
+    set -l dotfiles_root (dirname "$common_dir")
+    set -l projects_dir (dirname "$dotfiles_root")
+    set -l agent_root (dirname "$projects_dir")
+
+    if test (basename "$dotfiles_root") != dotfiles
+        return
+    end
+    if test (basename "$projects_dir") != projects
+        return
+    end
+    if not test -d "$agent_root/home/config/codex"
+        return
+    end
+
+    python3 -c 'import os, sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))' "$agent_root" "$launch_pwd" 2>/dev/null
+end
+
 function __codex_set_pane_base_title
     if not set -q TMUX
         return
@@ -157,12 +220,15 @@ function __codex_run_interactive
     set -l physical_pwd (__codex_physical_path "$PWD")
     set -l normalized_argv (__codex_normalize_cd_args $argv)
     set -l target_path (__codex_target_path $normalized_argv)
+    set -l dotfiles_agent_add_dir (__codex_dotfiles_agent_add_dir "$physical_pwd" "$target_path")
     set -l started_at (date +%s)
     set -l watcher_pid
 
     __codex_set_pane_base_title $normalized_argv
     builtin cd "$physical_pwd"
     __codex_mark_session_probe "$target_path" "$started_at"
+    __codex_agmsg_tmux_scope_join "$target_path"
+    __codex_export_agmsg_identity
     if set -q TMUX; and set -q TMUX_PANE
         set -l helper_path (__codex_ai_pane_title_sync_path)
         if test -n "$helper_path"
@@ -170,7 +236,11 @@ function __codex_run_interactive
             set watcher_pid $last_pid
         end
     end
-    command codex $normalized_argv
+    if test -n "$dotfiles_agent_add_dir"
+        command codex --add-dir "$dotfiles_agent_add_dir" $normalized_argv
+    else
+        command codex $normalized_argv
+    end
     set -l exit_code $status
     if test -n "$watcher_pid"
         kill $watcher_pid 2>/dev/null

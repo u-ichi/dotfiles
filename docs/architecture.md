@@ -10,6 +10,8 @@
 ├── install.sh                  # 初回セットアップ / 日常更新 (Brewfile + 設定ファイルコピー + brew/npm 更新)
 ├── lint.sh                     # ShellCheck / fish / taplo / json チェック
 ├── copy.conf                   # コピー定義 (ソース → コピー先の宣言)
+├── scripts/
+│   └── check-tmux-safety.sh    #   default tmux server を落とす unsafe command の検出
 ├── lib/
 │   ├── copy.sh                 #   設定ファイルコピー関数 (copy.conf を読み込む)
 │   ├── docker.sh               #   Docker Desktop 自動起動の有効化
@@ -27,6 +29,8 @@
 │   │   ├── fish_plugins        #   Fisher プラグイン一覧
 │   │   ├── completions/        #   補完定義 (gcloud, gsutil)
 │   │   └── functions/          #   カスタム関数 (claude/codex/ai-panes/sidebar 等、テーマ系は .gitignore)
+│   ├── zsh/{zshenv,zprofile}   # zsh 起動時の Homebrew PATH 優先設定
+│   ├── bash/bash_profile       # bash login shell の Homebrew PATH 優先設定
 │   ├── git/config              # Git 設定 (共通、個人情報は config.local に分離)
 │   ├── ssh/config              # SSH 設定 (Include のみ、ホスト定義は ~/.ssh/config.local に分離)
 │   ├── tmux/tmux.conf          # tmux 設定 (prefix: Ctrl+S)
@@ -35,6 +39,7 @@
 │   ├── tmux/update-ai-display-indexes.sh # tmux AI sidebar 用表示番号の再採番
 │   ├── tmux/cleanup-ai-sidebars.sh # orphan 化した tmux AI sidebar の削除
 │   ├── tmux/ai-sidebar-click.sh   # tmux AI sidebar のクリック解決
+│   ├── tmux/agmsg-tmux-*.sh       # agmsg の到達範囲を tmux window に束ねる agent 内部 helper
 │   ├── tmux/test-ai-sidebars-isolated.sh # 専用 socket 上の tmux AI sidebar 検証
 │   ├── ghostty/config          # Ghostty ターミナル設定
 │   ├── glow/glow.yml           # Glow (markdown viewer) 設定
@@ -54,6 +59,7 @@
 |------|------|------|
 | 一般的な設定ファイル | コピー (`copy.conf`) | `~/` 配下に実体を置き、リポジトリへの symlink 依存をなくす |
 | Fish Shell | 個別ファイル単位のコピー | `fisher` 等が自動生成するファイル (`fish_variables`, テーマ系) の repo 混入を防ぐ |
+| zsh / bash 起動ファイル | コピー (`copy.conf`) | 非対話 shell や `#!/usr/bin/env bash` でも Homebrew の CLI を優先する |
 | Fisher プラグイン | `fish_plugins` のみ追跡 + `fisher update` で復元 | プラグイン本体は upstream で管理されるため、リスト管理で十分 |
 | AWS config | `config.d/` のスニペットを連結して `~/.aws/config` に書き出す | プロファイルごとに分割管理しつつ、AWS CLI が読む単一ファイルを提供 |
 
@@ -72,9 +78,22 @@ dotfiles 側では扱わない。詳細は claude.codex の `install.sh` と `do
 | `.config/tmux/update-ai-display-indexes.sh` | tmux pane の増減後に AI sidebar 用の表示番号 (`@ai_display_index`) だけを再採番する。sidebar の作成や layout 変更は行わない |
 | `.config/tmux/cleanup-ai-sidebars.sh` | 通常 pane が残っていない window の orphan sidebar を閉じる |
 | `.config/tmux/ai-sidebar-click.sh` | AI sidebar のクリック行から対象 pane を解決して移動する。`AI_SIDEBAR_CLICK_DRY_RUN=1` では対象 pane の出力だけ行う |
+| `.config/tmux/agmsg-tmux-*.sh` | `agmsg` の team を tmux socket/session/window から生成し、同一 tmux window 内の AI session だけが同じ message scope に入るよう補助する agent 内部 helper。source pane/team が一意に確定しない場合や別 window 宛は送信しない。`agmsg-tmux-notify.sh` は unread を read-only 集計し pane title/sidebar 用の summary を更新する。実用 UX と作業計画の基準資料は [`docs/agmsg-practical-ux-design.html`](agmsg-practical-ux-design.html) |
 | `.config/tmux/test-ai-sidebars-isolated.sh` | 専用 socket の disposable tmux server だけを使い、sidebar 既定有効化と新規 window hook を検証する |
+| `scripts/check-tmux-safety.sh` | server-wide kill が `-S` / `-L` なしで記述されていないかを検出する。`lint.sh` と pre-commit hook から実行する |
 
 `install.sh` は冪等。何度実行しても安全。
+
+## PATH 管理
+
+macOS では標準の `/bin/bash` が古い Bash 3.2 のため、`#!/usr/bin/env bash` のスクリプトが
+Bash 4 以降の構文に依存していると失敗する。dotfiles では `brew 'bash'` を管理対象にし、
+Fish は `.config/fish/config.fish`、zsh は `.config/zsh/zshenv` と `.config/zsh/zprofile`、bash login shell は
+`.config/bash/bash_profile` で `/opt/homebrew/bin` と `/opt/homebrew/sbin` を PATH の先頭へ寄せる。
+
+`.zshenv` は非対話 zsh でも読まれるため、出力や重い処理は置かず PATH 整備だけに限定する。
+login zsh では macOS の `/etc/zprofile` が `.zshenv` の後に PATH を組み直すため、`.zprofile` でも
+同じ PATH 優先設定を適用する。
 
 ## 補助モジュールと MODE 引数
 
@@ -193,9 +212,11 @@ tmux の `pane-scrollbars` は copy/view mode で右端に 1 カラムの scroll
 `after-new-window` / `prefix+G` に限定する。`pane-focus-in` / `after-select-window` などの hook から
 sidebar 作成や layout 変更は行わない。
 
-tmux 設定や sidebar 挙動の検証では、default tmux server を丸ごと終了する操作を実行しない。
+tmux 設定や sidebar 挙動の検証では、default server に対して server-wide kill を実行しない。
 動作検証は `.config/tmux/test-ai-sidebars-isolated.sh` を使い、専用 socket の disposable server
 だけを作成・破棄する。
+server-wide kill を使う検証は同一 command に `-S <socket>` または `-L <name>` がある場合だけ許可する。
+`-f` は設定ファイル指定であり server 隔離ではないため、安全条件に含めない。
 
 ## 個人情報・マシン依存設定の分離
 

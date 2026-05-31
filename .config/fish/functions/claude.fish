@@ -63,6 +63,63 @@ function __claude_fallback_title
     printf '%s\n' "$title"
 end
 
+function __claude_agmsg_tmux_scope_join --argument-names project_path
+    if not set -q TMUX
+        return
+    end
+    if not set -q TMUX_PANE
+        return
+    end
+
+    set -l helper "$HOME/.config/tmux/agmsg-tmux-join.sh"
+    set -l skill_dir "$HOME/.agents/skills/agmsg"
+    if set -q AGMSG_SKILL_DIR
+        set skill_dir "$AGMSG_SKILL_DIR"
+    end
+    test -x "$helper"; or return
+    test -x "$skill_dir/scripts/join.sh"; or return
+
+    command "$helper" --type claude-code --target "$TMUX_PANE" --project-path "$project_path" --skip-delivery >/dev/null 2>&1
+end
+
+function __claude_export_agmsg_identity
+    if not set -q TMUX
+        return
+    end
+    if not set -q TMUX_PANE
+        return
+    end
+
+    set -gx AGMSG_TMUX_CURRENT_PANE "$TMUX_PANE"
+
+    set -l socket_path (tmux display-message -p -t "$TMUX_PANE" '#{socket_path}' 2>/dev/null)
+    if test -n "$socket_path"
+        set -gx AGMSG_TMUX_SOCKET "$socket_path"
+    end
+
+    set -l identity (tmux show-option -p -v -t "$TMUX_PANE" @agmsg_active_identity 2>/dev/null)
+    if test -n "$identity"
+        set -gx AGMSG_AGENT_ID "$identity"
+    end
+end
+
+function __claude_agmsg_should_bootstrap_worker
+    if not set -q AGMSG_AGENT_ID
+        return 1
+    end
+
+    switch "$AGMSG_AGENT_ID"
+        case 'worker*' 'reviewer*'
+            return 0
+        case '*'
+            return 1
+    end
+end
+
+function __claude_agmsg_worker_bootstrap_prompt
+    printf '%s\n' 'agmsg worker bootstrap: Monitor が未起動なら起動し、ready だけ返してください。依頼処理はしないでください。'
+end
+
 # Claude Code 起動の内部ヘルパ。worktree モードのフラグ分岐から共通で呼ぶ。
 #
 # session 情報 (session_id / cwd / started_at) の pane option 書き込みは
@@ -74,10 +131,28 @@ end
 # 旧版は fish 側で watcher process を spawn して jsonl を mtime + cwd で
 # ヒューリスティック探索していたが、orphan watcher の race が頻発したため廃止。
 function __claude_run
+    set -l original_argc (count $argv)
+
     if set -q TMUX; and set -q TMUX_PANE
         __claude_ensure_ai_pane_title_sync
         set -l fallback_title (__claude_fallback_title $argv)
         __ai_pane_title_sync set-base "$TMUX_PANE" "$fallback_title" claude-fallback
+        __ai_pane_title_sync mark-app "$TMUX_PANE" claude
+        __claude_agmsg_tmux_scope_join (__claude_physical_path "$PWD")
+        __claude_export_agmsg_identity
+    end
+
+    if test $original_argc -eq 0
+        if __claude_agmsg_should_bootstrap_worker
+            command claude (__claude_agmsg_worker_bootstrap_prompt)
+            set -l exit_code $status
+            if set -q TMUX; and set -q TMUX_PANE
+                tmux select-pane -t "$TMUX_PANE" -T (basename "$PWD") 2>/dev/null
+                __claude_ensure_ai_pane_title_sync
+                __ai_pane_title_sync clear "$TMUX_PANE"
+            end
+            return $exit_code
+        end
     end
 
     command claude $argv

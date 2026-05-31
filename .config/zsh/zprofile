@@ -1,0 +1,4 @@
+# macOS の /etc/zprofile は path_helper で PATH を組み直す。
+# login zsh では .zshenv の後に読まれるため、ここでも Homebrew の CLI を優先し直す。
+PATH="/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
+export PATH

@@ -5,5 +5,5 @@
 
 fix_permissions() {
   chmod 755 "$SCRIPT_DIR"/*.sh "$SCRIPT_DIR"/lib/*.sh
-  chmod +x "$SCRIPT_DIR/.config/tmux/rename-windows.sh" "$SCRIPT_DIR/hooks/pre-commit"
+  chmod +x "$SCRIPT_DIR/.config/tmux"/*.sh "$SCRIPT_DIR/hooks/pre-commit"
 }

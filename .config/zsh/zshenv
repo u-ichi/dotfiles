@@ -1,0 +1,4 @@
+# zsh 経由で起動する非対話 shell でも Homebrew の CLI を優先する。
+# `#!/usr/bin/env bash` はこの PATH を使うため、brew bash が /bin/bash より先に解決される。
+PATH="/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
+export PATH

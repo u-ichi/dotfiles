@@ -17,6 +17,7 @@ brew 'tfenv'
 brew 'trivy'
 
 # === CLI: 開発ツール ===
+brew 'bash'
 brew 'direnv'
 brew 'docker-compose'
 brew 'fish'

@@ -785,7 +785,7 @@ function __ai_notify_state_change --argument-names pane_id new_state old_state d
             # 完了は「作業中からの遷移」に限定する (idle↔idle / waiting→idle では鳴らさない)。
             test "$old_state" = working; or return 0
             set message "完了 · $detail"
-            set sound Purr
+            set sound Submarine
         case '*'
             return 0
     end
@@ -847,7 +847,9 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
     # v35: 重複時の詳細ヘッダに色付き上位目標行を再利用する。
     # v39: sidebar writer でも Codex pane の base title を復旧する。
     # v40: agmsg identity は pane border 専用にし、sidebar 表示名からは外す。
-    set -l state_version 40
+    # v41: agmsg unread summary を sidebar 表示名へ付与する。
+    # v42: 完了通知音を Purr → Submarine に変更 (耳に残りにくいマイルドな音へ)。
+    set -l state_version 42
     while true
         # ===== Section 1: 初期化 (loop 毎の状態リセット) =====
         set -l lines
@@ -871,7 +873,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
         # tmux list-panes で全 pane の option を 1 回でまとめて取得する (毎 pane に
         # show-option を打つより速い)。format string の field 数を変えたら、下の
         # `string split -m N` (parts 配列の総数 - 1) も合わせて更新すること。
-        set -l raw (tmux list-panes -s -F '#{window_index}.#{pane_index}	#{pane_title}	#{@fixed_title}	#{@ai_base_title}	#{@ai_sidebar}	#{pane_current_path}	#{window_index}	#{@ai_display_index}	#{pane_current_command}	#{pane_id}	#{@ai_state}	#{@ai_state_since}	#{@ai_state_version}	#{pane_active}	#{window_id}	#{@ai_codex_started_at}	#{@ai_codex_session_file}	#{@ai_codex_cwd}	#{@ai_app}	#{@ai_claude_session_id}	#{@ai_claude_cwd}	#{window_name}	#{@ai_title_source}' 2>/dev/null)
+        set -l raw (tmux list-panes -s -F '#{window_index}.#{pane_index}	#{pane_title}	#{@fixed_title}	#{@ai_base_title}	#{@ai_sidebar}	#{pane_current_path}	#{window_index}	#{@ai_display_index}	#{pane_current_command}	#{pane_id}	#{@ai_state}	#{@ai_state_since}	#{@ai_state_version}	#{pane_active}	#{window_id}	#{@ai_codex_started_at}	#{@ai_codex_session_file}	#{@ai_codex_cwd}	#{@ai_app}	#{@ai_claude_session_id}	#{@ai_claude_cwd}	#{window_name}	#{@ai_title_source}	#{@agmsg_unread_summary}' 2>/dev/null)
         # 自分自身の @ai_sidebar を見て writer 判定する。
         # 旧: session 内最初の writer だけ writer 認定 → 2 つ目以降の sidebar pane
         # (window 2, 3, ... の writer) が is_writer=0 のまま動き、state_version self-check
@@ -888,7 +890,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
         #   - sidebar と同じ window で active な Codex/Claude pane を active_* 変数に記録
         set -l entries
         for line in $raw
-            set -l parts (string split -m 22 \t -- $line)
+            set -l parts (string split -m 23 \t -- $line)
             set -l loc $parts[1]
             set -l title $parts[2]
             set -l fixed_title $parts[3]
@@ -911,6 +913,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             set -l claude_cwd $parts[21]
             set -l window_name $parts[22]
             set -l title_source $parts[23]
+            set -l agmsg_unread_summary $parts[24]
             set -l codex_session_id (__ai_codex_session_id_from_title "$title")
 
             test "$loc" = (tmux display-message -p -t "$TMUX_PANE" '#{window_index}.#{pane_index}' 2>/dev/null); and continue

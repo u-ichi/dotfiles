@@ -51,6 +51,7 @@ echo ""
 echo "=== tmux isolated tests ==="
 if command -v tmux &>/dev/null && command -v fish &>/dev/null; then
   "$SCRIPT_DIR/.config/tmux/test-ai-sidebars-isolated.sh" || errors=$((errors + 1))
+  "$SCRIPT_DIR/.config/tmux/test-agmsg-tmux-scope-isolated.sh" || errors=$((errors + 1))
 else
   echo "  スキップ: tmux または fish がインストールされていません"
 fi

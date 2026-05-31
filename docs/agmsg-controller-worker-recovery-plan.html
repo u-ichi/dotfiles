@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>agmsg/tmux controller-worker 改修引き継ぎ計画</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fb;
+      --panel: #ffffff;
+      --ink: #17202f;
+      --muted: #5d6b7c;
+      --line: #d8dee8;
+      --accent: #1264a3;
+      --ok: #167a5a;
+      --warn: #9a5b00;
+      --bad: #a33a3a;
+      --code-bg: #eef3f8;
+      --header: #132235;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.65;
+    }
+
+    header {
+      background: var(--header);
+      color: #ffffff;
+      padding: 32px 24px;
+    }
+
+    main {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    h1, h2, h3 {
+      line-height: 1.25;
+      margin: 0 0 12px;
+    }
+
+    h1 { font-size: 30px; }
+
+    h2 {
+      border-bottom: 1px solid var(--line);
+      font-size: 22px;
+      margin-top: 32px;
+      padding-bottom: 8px;
+    }
+
+    h3 {
+      font-size: 17px;
+      margin-top: 18px;
+    }
+
+    p { margin: 8px 0 12px; }
+
+    code, pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    code {
+      background: var(--code-bg);
+      border-radius: 4px;
+      padding: 1px 5px;
+    }
+
+    pre {
+      background: #101824;
+      border-radius: 6px;
+      color: #e8eef7;
+      overflow-x: auto;
+      padding: 14px;
+      white-space: pre-wrap;
+    }
+
+    table {
+      border-collapse: collapse;
+      margin: 12px 0 18px;
+      width: 100%;
+    }
+
+    th, td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: #eef2f7;
+      font-weight: 700;
+    }
+
+    ul, ol {
+      margin: 8px 0 16px;
+      padding-left: 24px;
+    }
+
+    li { margin: 4px 0; }
+
+    .summary {
+      color: #c7d5e8;
+      max-width: 920px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      margin: 16px 0;
+      padding: 18px;
+    }
+
+    .callout {
+      background: #fff8e8;
+      border-left: 4px solid var(--warn);
+      padding: 12px 14px;
+    }
+
+    .decision {
+      background: #edf7f3;
+      border-left: 4px solid var(--ok);
+      padding: 12px 14px;
+    }
+
+    .danger {
+      background: #fff1f1;
+      border-left: 4px solid var(--bad);
+      padding: 12px 14px;
+    }
+
+    .muted { color: var(--muted); }
+
+    .label {
+      border-radius: 999px;
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1;
+      margin-right: 6px;
+      padding: 5px 8px;
+    }
+
+    .label.ok { background: #dff3ea; color: #0f6044; }
+    .label.warn { background: #fff0c9; color: #7a4a00; }
+    .label.bad { background: #ffe0e0; color: #8c2e2e; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>agmsg/tmux controller-worker 改修引き継ぎ計画</h1>
+    <p class="summary">
+      controller pane への自然文指示から、同一 tmux window 内の worker へ安全に委譲し、
+      通知、次 turn 処理、返信回収まで成立させるための修正計画。
+      別セッションで実装を引き継ぐため、背景、最終方針、実装対象、検証条件をまとめる。
+    </p>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h2>結論</h2>
+      <div class="decision">
+        <p>
+          v1 は <strong>同一 tmux window 限定</strong> とする。
+          controller helper は source pane / source team が一意に確定できない場合に送信しない。
+          Codex では即時実行を約束せず、即時に保証するのは tmux 上の unread 通知までとする。
+        </p>
+      </div>
+      <p>
+        今回の問題は、controller が window3 の worker に送るつもりで、古い team を history や曖昧な identity
+        推定から選び、別 team の worker 宛に送ってしまったことにある。したがって、修正は transport だけでなく、
+        設計文書、skill 手順、hook 文言、tmux 表示、回帰テストまで一体で行う。
+      </p>
+    </section>
+
+    <section>
+      <h2>実用 UX</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>項目</th>
+            <th>採用する体験</th>
+            <th>不採用にする体験</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>ユーザー操作</td>
+            <td>controller pane に自然文で依頼する。</td>
+            <td>ユーザーが <code>send.sh</code> や tmux helper を直接実行する。</td>
+          </tr>
+          <tr>
+            <td>宛先指定</td>
+            <td><code>worker1</code>、<code>worker2</code>、<code>2:2</code>、<code>right</code> などを同一 window 内で解決する。</td>
+            <td>別 window の pane を暗黙に選ぶ。</td>
+          </tr>
+          <tr>
+            <td>Codex delivery</td>
+            <td>unread 通知は即時表示し、実処理は次 turn または明示的な受信確認で行う。</td>
+            <td>Claude Monitor 相当の即時処理を Codex で保証する。</td>
+          </tr>
+          <tr>
+            <td>controller 報告</td>
+            <td>宛先 identity、pane、request id、期待返信、未返信 timeout を説明する。</td>
+            <td>内部 helper command の文字列をユーザー向け手順として見せる。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>修正方針</h2>
+      <h3>1. 設計文書を HTML に統一する</h3>
+      <ul>
+        <li><code>docs/agmsg-practical-ux-design.html</code> を canonical な実用設計にする。</li>
+        <li>古い agmsg/tmux の設計メモは HTML 側に統合し、混乱する旧仕様を残さない。</li>
+        <li>役割メタデータという旧発想ではなく、<code>identity</code>、<code>namespace</code>、<code>actas</code> の語で統一する。</li>
+      </ul>
+
+      <h3>2. source pane 不明時は fail closed にする</h3>
+      <ul>
+        <li>controller workflow は <code>history</code> や <code>whoami</code> の複数候補から team を推定しない。</li>
+        <li>controller helper は source pane を明示できる経路を必須にする。</li>
+        <li>source pane / source team が一意に確定しない場合は送信しない。</li>
+        <li>送信しなかった場合は、helper command ではなく「送信しなかった理由」「解決できた候補」「次に必要な操作」を自然文で返す。</li>
+      </ul>
+
+      <h3>3. cross-window 送信を禁止する</h3>
+      <ul>
+        <li><code>agmsg-tmux-send.sh</code> の送信 team は常に source pane の team に固定する。</li>
+        <li><code>2:2</code> や <code>%pane</code> が別 window を指す場合は fail closed し、<code>send.sh</code> を呼ばない。</li>
+        <li>既存 isolated test の「別 window team に送れること」を期待する箇所は、危険挙動として期待値を反転する。</li>
+      </ul>
+
+      <h3>4. routing を監査可能にする</h3>
+      <ul>
+        <li>structured request に <code>schema_version</code> を追加する。</li>
+        <li><code>source_pane</code>、<code>source_team</code>、<code>target_pane</code>、<code>target_team</code> を body に含める。</li>
+        <li>history から、どの pane / team 解決で送信されたかを後から確認できるようにする。</li>
+      </ul>
+
+      <h3>5. unread 通知を tmux 上に出す</h3>
+      <ul>
+        <li>DB を read-only poll する notification watcher を追加する。</li>
+        <li>pane title / sidebar に <code>worker1 !1 from controller1</code> 相当の unread summary を出す。</li>
+        <li>通知 watcher は <code>read_at</code> を更新しない。</li>
+        <li>閉じた pane、stale identity、別 window の membership は表示対象から外す。</li>
+      </ul>
+
+      <h3>6. Stop hook の誤既読化を防ぐ</h3>
+      <ul>
+        <li>Codex Stop hook / <code>check-inbox.sh</code> は pane identity が一意に確定した時だけ unread を読む。</li>
+        <li>複数候補、fallback identity、tmux pane option 不明時は未読のまま残す。</li>
+        <li>worker workflow に渡すのは structured request だけにする。</li>
+      </ul>
+
+      <h3>7. Claude 向け hook 文言を日本語化する</h3>
+      <ul>
+        <li><code>AGMSG-DIRECTIVE</code> と Monitor directive の説明文を日本語にする。</li>
+        <li><code>command</code>、<code>description</code>、<code>persistent</code> など tool field 名は維持する。</li>
+        <li>directive 内に「このセッションでは日本語で応答すること」を明記する。</li>
+        <li><code>description: agmsg inbox stream</code> は <code>description: agmsg 受信監視</code> などに寄せる。</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>主な修正対象</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>対象</th>
+            <th>修正内容</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>docs/agmsg-practical-ux-design.html</code></td>
+            <td>canonical 設計、fail closed、通知表示、hook 日本語 directive、acceptance criteria を反映する。</td>
+          </tr>
+          <tr>
+            <td><code>docs/architecture.md</code></td>
+            <td>agmsg hook / tmux helper / Codex Stop hook / Claude Monitor directive の責務を更新する。</td>
+          </tr>
+          <tr>
+            <td><code>home/skills/agmsg/SKILL.md</code></td>
+            <td>controller / worker workflow から曖昧推定を削除し、source pane 必須と日本語 directive 方針を明記する。</td>
+          </tr>
+          <tr>
+            <td><code>home/skills/agmsg/scripts/check-inbox.sh</code></td>
+            <td>identity 確定条件、structured request 判定、誤既読防止を追加する。</td>
+          </tr>
+          <tr>
+            <td><code>home/skills/agmsg/scripts/session-start.sh</code></td>
+            <td>Claude Monitor 起動 directive を日本語化する。</td>
+          </tr>
+          <tr>
+            <td><code>home/skills/agmsg/scripts/delivery.sh</code></td>
+            <td>monitor / stop directive を日本語化し、言語誘導を防ぐ。</td>
+          </tr>
+          <tr>
+            <td><code>.config/tmux/agmsg-tmux-send.sh</code></td>
+            <td>same-window 制約、source team 固定、cross-window fail closed を実装する。</td>
+          </tr>
+          <tr>
+            <td><code>.config/tmux/agmsg-tmux-peers.sh</code></td>
+            <td>controller 経路で source pane を必須にする。</td>
+          </tr>
+          <tr>
+            <td><code>.config/tmux/update-ai-display-indexes.sh</code> ほか tmux 表示系</td>
+            <td>unread summary を pane title / sidebar 表示に統合する。</td>
+          </tr>
+          <tr>
+            <td><code>.config/tmux/test-agmsg-tmux-scope-isolated.sh</code></td>
+            <td>今回の事故を検出する回帰テストへ期待値を更新・追加する。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>テスト計画</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>テスト</th>
+            <th>検出したい失敗</th>
+            <th>合格条件</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>cross-window rejection</td>
+            <td>window1 controller から別 window の <code>2:2</code> / <code>%pane</code> に送れてしまう。</td>
+            <td>fail closed し、<code>send.sh</code> が呼ばれない。</td>
+          </tr>
+          <tr>
+            <td>wrong-team regression</td>
+            <td>古い team の同名 <code>worker1</code> に誤配送する。</td>
+            <td>現在 window の worker は別 team message を処理せず、誤配送がログで検出される。</td>
+          </tr>
+          <tr>
+            <td>missing env regression</td>
+            <td><code>TMUX_PANE</code> や <code>AGMSG_TMUX_CURRENT_PANE</code> が無い状態で推定送信する。</td>
+            <td>controller send は送信せず、理由を返す。</td>
+          </tr>
+          <tr>
+            <td>Stop hook safety</td>
+            <td>identity が曖昧なまま unread を既読化する。</td>
+            <td><code>read_at</code> が付かず、未読のまま残る。</td>
+          </tr>
+          <tr>
+            <td>notification UX</td>
+            <td>送信済みだが tmux 上で通知が見えない。</td>
+            <td>pane title / sidebar に unread count と送信元が出る。</td>
+          </tr>
+          <tr>
+            <td>notification read safety</td>
+            <td>通知表示だけで message が既読になる。</td>
+            <td>watcher 実行後も <code>read_at</code> は更新されない。</td>
+          </tr>
+          <tr>
+            <td>next-turn delivery</td>
+            <td>正しい same-window team への request が次 turn で処理されない。</td>
+            <td>worker の次 turn で inbox context として request が出る。</td>
+          </tr>
+          <tr>
+            <td>directive language</td>
+            <td>hook 注入文の英語により Claude が英語応答へ寄る。</td>
+            <td>emitted directive が日本語主体で、「日本語で応答」が含まれる。</td>
+          </tr>
+          <tr>
+            <td>document cleanup</td>
+            <td>旧仕様の設計文言が残り、次セッションが混乱する。</td>
+            <td>旧 Markdown 設計参照、旧 cross-window 期待値、旧称の混在が残らない。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <p>
+          完了前に <code>./lint.sh</code> と <code>.config/tmux/test-agmsg-tmux-scope-isolated.sh</code>
+          を必ず実行する。HTML は構文検証だけでなく、設計内容が旧仕様へ逆戻りしていないことを検索で確認する。
+        </p>
+      </div>
+    </section>
+
+    <section>
+      <h2>別セッション用 Goal</h2>
+      <pre>Goal: docs/agmsg-controller-worker-recovery-plan.html に書かれた agmsg/tmux controller-worker 設計修正計画を実装し、誤配送・通知不明瞭・Codex next-turn 未処理・Claude hook 英語誘導を検出できるテストまで通す。
+
+必須条件:
+- docs/agmsg-practical-ux-design.html を canonical 設計に更新する
+- 古い agmsg/tmux 設計メモは HTML に統合し、混乱する旧仕様を残さない
+- controller helper は source pane/team 不明時に fail closed する
+- cross-window 送信は禁止し、同一 tmux window 内だけに限定する
+- Codex は即時処理ではなく、即時 unread 通知 + 次 turn 処理として実装する
+- Claude 向け AGMSG-DIRECTIVE / Monitor directive は日本語化する
+- 今回の事故を検出できる regression test を追加する
+- ./lint.sh と agmsg isolated tmux test を通す</pre>
+    </section>
+
+    <section>
+      <h2>実装順序</h2>
+      <ol>
+        <li>HTML 設計と agmsg skill 文書を先に直し、曖昧推定禁止と日本語 directive 方針を固定する。</li>
+        <li>tmux helper の source pane 必須化と same-window 制約を実装する。</li>
+        <li>Stop hook / check-inbox の誤既読防止を実装する。</li>
+        <li>unread notification watcher と tmux 表示を実装する。</li>
+        <li>Claude Monitor directive を日本語化する。</li>
+        <li>回帰テストを追加し、今回の事故パターンが失敗として検出されることを確認する。</li>
+        <li>source-of-truth から generated/live へ反映し、lint と isolated test を通す。</li>
+      </ol>
+    </section>
+  </main>
+</body>
+</html>

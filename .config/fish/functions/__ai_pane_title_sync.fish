@@ -32,6 +32,9 @@ function __ai_pane_title_sync_clear --argument-names pane_id
     tmux set-option -p -t "$pane_id" @ai_claude_started_at "" 2>/dev/null
     tmux set-option -p -t "$pane_id" @ai_claude_cwd "" 2>/dev/null
     tmux set-option -p -t "$pane_id" @ai_claude_session_id "" 2>/dev/null
+    tmux set-option -p -t "$pane_id" @agmsg_active_identity "" 2>/dev/null
+    tmux set-option -p -t "$pane_id" @agmsg_display_identity "" 2>/dev/null
+    tmux set-option -p -t "$pane_id" @agmsg_identity_source "" 2>/dev/null
 end
 
 function __ai_pane_title_sync_codex_session_start_epoch --argument-names file
