@@ -135,13 +135,20 @@ window 切替時刻ではなく、状態が変化した時刻を示す。状態�
 sidebar 起動時点で過去の遷移時刻を復元できない pane は `--:--` と表示する。
 sidebar 起動後に新規出現した pane は検出時刻を初期時刻として使い、以後の状態変化で現在時刻を入れる。
 Codex 起動直後の `project | Context ... used` title は status line 由来なので、pane border では
-`@ai_base_title` に保存した短い起動ディレクトリ名を表示する。タスク名 title になった後は
+`@ai_base_title` に保存した短い起動ディレクトリ名を表示する。Codex title watcher は
+active native goal がある場合は `~/.codex/goals_1.sqlite` の objective を優先し、なければ
+`state_5.sqlite` の thread title を `@ai_base_title` に入れる。タスク名 title になった後は
 `#{pane_title}` をそのまま表示する。
 Codex の session log に最新 `update_plan` がある場合、sidebar は active Codex pane の下に
-`explanation` 由来の `Goal:` 行、Task 一覧、active Task 配下の SubTask 行を表示する。
+`explanation` 由来の上位目標行、Task 一覧、active Task 配下の SubTask 行を表示する。
+native goal が active で `explanation` に `Goal:` 行がない場合は、
+`~/.codex/goals_1.sqlite` の objective を上位目標行として補完する。
 Task 行は `完了数/総数 Task 名` を含むツリーの親行として出し、active Task には `>`、
 完了 Task には `✓`、未着手 Task には `-` を付ける。sidebar 上では `Task:` / `SubTask:`
-prefix を消し、`Goal:` 行は sidebar 幅に合わせて短縮表示する。Goal がない plan では
+prefix を消し、上位目標行は `Goal:` ラベルを付けず sidebar 幅に合わせて短縮表示する。
+pane 表示名と上位目標行が同じ場合は、色付きの上位目標行を詳細ブロックのヘッダとして残し、
+plan / task tree 側の重複行だけを省いて同じ文言の二重表示を避ける。
+Goal がない plan では
 Task 一覧から表示する。
 active Claude pane の場合も同じ枠で sidebar に TaskList ツリーを出す。Claude Code 本体の
 SessionStart hook (claude-code-base-repository の
@@ -150,7 +157,7 @@ SessionStart hook (claude-code-base-repository の
 これらから `~/.claude/projects/<encoded-cwd>/<session_id>.jsonl` を決定論的に組み立てて読む。
 encoded-cwd は cwd の英数字とハイフン以外を `-` に置換した形式 (`/`, `@`, `.`, space すべて `-`)。
 `TaskCreate` / `TaskUpdate` tool event を順次再生して最新タスク状態を復元する。最初の
-`TaskCreate` の `metadata.goal` を `Goal:` 行に、`metadata.parentTaskId` で親子関係を
+`TaskCreate` の `metadata.goal` を上位目標行に、`metadata.parentTaskId` で親子関係を
 組み立て、`status` (pending/in_progress/completed) を `-` / `>` / `✓` マーカーに割り当てる。
 `status=deleted` のタスクは出さない。Codex plan と同じく Task 行は `完了子数/総数 subject` で出し、
 親なしタスク (parentTaskId なし) を親行、それ以外を子行 (2 スペースインデント) として描画する。

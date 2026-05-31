@@ -1,6 +1,7 @@
 function __ai_pane_title_sync_clean --argument-names title
     set title (string replace -ar '[\t\r\n]+' ' ' -- "$title")
-    string trim -- "$title"
+    set title (string trim -- "$title")
+    test -n "$title"; and printf '%s\n' "$title"
 end
 
 function __ai_pane_title_sync_set_base --argument-names pane_id title source
@@ -116,6 +117,21 @@ function __ai_pane_title_sync_codex_thread_title --argument-names session_file
     __ai_pane_title_sync_clean "$title"
 end
 
+function __ai_pane_title_sync_codex_goal_title --argument-names session_file
+    command -q sqlite3; or return 1
+    test -f "$session_file"; or return 1
+
+    set -l session_id (__ai_pane_title_sync_codex_session_id_from_file "$session_file")
+    test -n "$session_id"; or return 1
+
+    set -l db "$HOME/.codex/goals_1.sqlite"
+    test -f "$db"; or return 1
+
+    set -l escaped_id (string replace -a "'" "''" -- "$session_id")
+    set -l title (command sqlite3 "$db" "select objective from thread_goals where thread_id = '$escaped_id' and status = 'active' limit 1;" 2>/dev/null | command head -n 1)
+    __ai_pane_title_sync_clean "$title"
+end
+
 function __ai_pane_title_sync_codex_watch --argument-names pane_id cwd started_at fallback_title
     # NOTE: 関数定義ファイル更新を検知したら新版で自己 exec する (live 反映機構)。
     # fish の autoload キャッシュも source 済みプロセスも reload しないため、
@@ -157,9 +173,15 @@ function __ai_pane_title_sync_codex_watch --argument-names pane_id cwd started_a
         end
 
         if test -n "$session_file"
-            set -l title (__ai_pane_title_sync_codex_thread_title "$session_file")
+            set -l goal_title (__ai_pane_title_sync_codex_goal_title "$session_file")
+            set -l title "$goal_title"
+            set -l source codex-goal
+            if test -z "$title"
+                set title (__ai_pane_title_sync_codex_thread_title "$session_file")
+                set source codex-thread
+            end
             if test -n "$title"; and test "$title" != "$last_title"
-                __ai_pane_title_sync_set_base "$pane_id" "$title" codex-thread
+                __ai_pane_title_sync_set_base "$pane_id" "$title" "$source"
                 set last_title "$title"
             end
         end

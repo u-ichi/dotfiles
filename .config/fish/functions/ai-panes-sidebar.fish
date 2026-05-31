@@ -93,7 +93,16 @@ function __ai_codex_plan_lines --argument-names session_file max_line_chars max_
         (.payload.arguments | fromjson? | .explanation // "")
         | select(. != "")
     ' 2>/dev/null)
-    set -l native_goal_status (__ai_codex_native_goal_status "$session_file")
+    set -l native_goal_row (__ai_codex_native_goal_row "$session_file")
+    set -l native_goal_status
+    set -l native_goal_objective
+    if test -n "$native_goal_row"
+        set -l native_goal_parts (string split -m 1 \t -- "$native_goal_row")
+        set native_goal_status "$native_goal_parts[1]"
+        if test (count $native_goal_parts) -ge 2
+            set native_goal_objective "$native_goal_parts[2]"
+        end
+    end
 
     set -l plan_rows (printf '%s\n' "$plan_event" | command jq -r '
         (.payload.arguments | fromjson? | .plan // [])
@@ -150,17 +159,26 @@ function __ai_codex_plan_lines --argument-names session_file max_line_chars max_
 
     set -l remaining "$max_display_lines"
     # explanation は task-progress-async.md の規約上 `Goal:` / `目標:` で始まる形で
-    # 書かれる前提。この形で始まる時だけ上位目標として Goal 行に描画する。
+    # 書かれる前提。この形で始まる時だけ上位目標として描画する。
     # 「Goal は作らず、この発話の短期ゴールとして…します」のような地の文 explanation は
     # 規約を満たさないため Goal 行に昇格させない (昇格させると `Goal: Goal は作らず…` の
     # ように二重化し意味不明になる)。
+    set -l display_goal_text
     if test -n "$goal_line"; and string match -qr '^\s*(Goal|目標):' -- "$goal_line"
+        set display_goal_text (string replace -r '^\s*(Goal|目標):\s*' '' -- "$goal_line")
+    else
+        if test "$native_goal_status" = active; and test -n "$native_goal_objective"
+            set display_goal_text "$native_goal_objective"
+        end
+    end
+
+    if test -n "$display_goal_text"
         set -l goal_color (set_color yellow)
         if test -n "$native_goal_status"
             set goal_color (set_color --bold cyan)
         end
         set -l goal_reset (set_color normal)
-        set -l shortened_goal (string shorten -m $max_line_chars -- "$goal_line")
+        set -l shortened_goal (string shorten -m $max_line_chars -- "$display_goal_text")
         printf '%s%s%s\n' "$goal_color" "$shortened_goal" "$goal_reset"
         set remaining (math "$remaining - 1")
     end
@@ -270,7 +288,7 @@ function __ai_codex_session_id_from_file --argument-names session_file
     string match -qr '^[0-9a-f-]+$' -- "$session_id"; and printf '%s\n' "$session_id"
 end
 
-function __ai_codex_native_goal_status --argument-names session_file
+function __ai_codex_native_goal_row --argument-names session_file
     command -q sqlite3; or return 1
     set -l session_id (__ai_codex_session_id_from_file "$session_file")
     test -n "$session_id"; or return 1
@@ -279,7 +297,7 @@ function __ai_codex_native_goal_status --argument-names session_file
     test -f "$db"; or return 1
 
     set -l escaped_id (string replace -a "'" "''" -- "$session_id")
-    command sqlite3 "$db" "select status from thread_goals where thread_id = '$escaped_id' limit 1;" 2>/dev/null | command head -n 1
+    command sqlite3 -separator \t "$db" "select status, objective from thread_goals where thread_id = '$escaped_id' limit 1;" 2>/dev/null | command head -n 1
 end
 
 function __ai_claude_task_lines --argument-names session_file max_line_chars max_display_lines
@@ -397,7 +415,7 @@ function __ai_claude_task_lines --argument-names session_file max_line_chars max
         set -l parts (string split -m 4 \t -- "$line")
         switch "$parts[1]"
             case goal
-                printf '%s\n' (string shorten -m $max_line_chars -- (printf 'Goal: %s' "$parts[2]"))
+                printf '%s\n' (string shorten -m $max_line_chars -- "$parts[2]")
             case root
                 set -l item_status $parts[2]
                 set -l count $parts[4]
@@ -453,6 +471,39 @@ function __ai_sidebar_max_line_chars --argument-names pane_width
         set max_line_chars 1
     end
     printf '%s\n' "$max_line_chars"
+end
+
+function __ai_sidebar_plain_text --argument-names text
+    set text (string replace -a (set_color normal) '' -- "$text")
+    set text (string replace -a (set_color yellow) '' -- "$text")
+    set text (string replace -a (set_color --bold cyan) '' -- "$text")
+    set text (string replace -a (set_color green) '' -- "$text")
+    string trim -- "$text"
+end
+
+function __ai_sidebar_detail_lines --argument-names active_display max_line_chars
+    set -l detail_lines $argv[3..-1]
+    test (count $detail_lines) -gt 0; or return 1
+
+    set -l active_display_short (string shorten -m $max_line_chars -- "$active_display")
+    set -l detail_header "$active_display_short"
+    set -l skip_first_detail_line 0
+    if test (__ai_sidebar_plain_text "$detail_lines[1]") = (__ai_sidebar_plain_text "$active_display_short")
+        set detail_header "$detail_lines[1]"
+        set skip_first_detail_line 1
+    end
+    if test -n "$detail_header"
+        printf '%s\n' "$detail_header"
+    end
+
+    set -l detail_line_index 0
+    for detail_line in $detail_lines
+        set detail_line_index (math "$detail_line_index + 1")
+        if test "$skip_first_detail_line" = 1; and test "$detail_line_index" -eq 1
+            continue
+        end
+        printf ' %s\n' "$detail_line"
+    end
 end
 
 function __ai_codex_signal_line_state --argument-names line
@@ -752,7 +803,14 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
     # v26: 通知 detail 抽出を stdin 非依存にし、writer loop の read 待ち停止を防ぐ。
     # v27: Codex plan の Goal 行を native goal 有無で色分けする。
     # v28: Codex plan の Goal 行を `Goal:` / `目標:` 始まりの explanation のみに限定 (地の文を昇格させない)。
-    set -l state_version 29
+    # v29: native goal が active で explanation に Goal 行がない場合、objective を Goal 行として表示する。
+    # v30: sidebar に描画する上位目標から `Goal:` ラベルを除去する。
+    # v31: active pane 表示名と上位目標行が同じ場合、詳細ヘッダを省いて二重表示を避ける。
+    # v32: active pane 表示名と上位目標行が同じ場合、詳細側の上位目標行も省く。
+    # v33: 重複判定で active pane 表示名も sidebar 幅に短縮してから比較する。
+    # v34: 重複時も詳細ヘッダは残し、plan/task 側の重複上位目標行だけ省く。
+    # v35: 重複時の詳細ヘッダに色付き上位目標行を再利用する。
+    set -l state_version 36
     while true
         # ===== Section 1: 初期化 (loop 毎の状態リセット) =====
         set -l lines
@@ -1118,10 +1176,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             end
             if test (count $plan_lines) -gt 0
                 set -a lines ""
-                set -a lines (string shorten -m $max_line_chars -- "$active_codex_display")
-                for plan_line in $plan_lines
-                    set -a lines " "$plan_line
-                end
+                set -a lines (__ai_sidebar_detail_lines "$active_codex_display" "$max_line_chars" $plan_lines)
             end
         end
 
@@ -1145,10 +1200,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
                 set -l task_lines (__ai_claude_task_lines "$active_claude_session_file" "$max_line_chars" "$max_task_lines")
                 if test (count $task_lines) -gt 0
                     set -a lines ""
-                    set -a lines (string shorten -m $max_line_chars -- "$active_claude_display")
-                    for task_line in $task_lines
-                        set -a lines " "$task_line
-                    end
+                    set -a lines (__ai_sidebar_detail_lines "$active_claude_display" "$max_line_chars" $task_lines)
                 end
             end
         end
