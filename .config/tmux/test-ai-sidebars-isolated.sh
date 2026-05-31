@@ -7,8 +7,12 @@ TMP_BASE="${TMPDIR:-/tmp}"
 SOCKET_DIR="$(mktemp -d "$TMP_BASE/tmux-ai-sidebar-test.XXXXXX")"
 SOCKET="$SOCKET_DIR/socket"
 TEST_HOME="$SOCKET_DIR/home"
+TEST_PIDS=()
 
 cleanup() {
+  for pid in "${TEST_PIDS[@]}"; do
+    kill "$pid" >/dev/null 2>&1 || true
+  done
   command tmux -S "$SOCKET" kill-server >/dev/null 2>&1 || true
   rm -rf "$SOCKET_DIR"
 }
@@ -66,6 +70,24 @@ wait_for_window_absent() {
   return 1
 }
 
+wait_for_pane_option() {
+  local pane="$1"
+  local option="$2"
+  local expected="$3"
+  local actual
+
+  for _ in {1..30}; do
+    actual="$(tmux_i show-option -pqv -t "$pane" "$option" 2>/dev/null || true)"
+    if [ "$actual" = "$expected" ]; then
+      return 0
+    fi
+    sleep 0.1
+  done
+
+  echo "ERROR: pane option $option was not '$expected' (actual: '$actual')" >&2
+  return 1
+}
+
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
     echo "SKIP: $1 is not installed" >&2
@@ -79,6 +101,7 @@ require_command fish
 mkdir -p "$TEST_HOME/.config/fish/functions"
 ln -s "$SCRIPT_DIR" "$TEST_HOME/.config/tmux"
 ln -s "$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish" "$TEST_HOME/.config/fish/functions/ai-panes-sidebar.fish"
+ln -s "$SCRIPT_DIR/../fish/functions/__ai_pane_title_sync.fish" "$TEST_HOME/.config/fish/functions/__ai_pane_title_sync.fish"
 export HOME="$TEST_HOME"
 export TERM=xterm-256color
 
@@ -180,6 +203,9 @@ if command -v jq >/dev/null 2>&1; then
       echo "ERROR: Codex pane title sync does not prefer native goal objective" >&2
       exit 1
     fi
+
+    sqlite3 "$TEST_HOME/.codex/state_5.sqlite" "create table threads (id text primary key not null, title text, rollout_path text, updated_at integer);"
+    sqlite3 "$TEST_HOME/.codex/state_5.sqlite" "insert into threads (id, title, rollout_path, updated_at) values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'thread title smoke', '$codex_session_a', 1);"
   fi
 fi
 
@@ -194,6 +220,20 @@ base_title="$(tmux_i show-option -pqv -t "$normal_pane" @ai_base_title)"
 if [ -n "$fixed_title" ] || [ "$base_title" != "new-project" ]; then
   echo "ERROR: Codex pane title startup cleanup is invalid (fixed='$fixed_title', base='$base_title')" >&2
   exit 1
+fi
+
+if command -v jq >/dev/null 2>&1 && command -v sqlite3 >/dev/null 2>&1; then
+  tmux_i select-pane -t "$normal_pane" -T 'dotfiles | aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa | Context 1% used'
+  tmux_i set-option -p -t "$normal_pane" @ai_codex_session_file "$codex_session_a"
+  tmux_i set-option -p -t "$normal_pane" @ai_base_title ""
+  TMUX="$SOCKET,0,0" HOME="$TEST_HOME" fish -c "source '$SCRIPT_DIR/../fish/functions/__ai_pane_title_sync.fish'; __ai_pane_title_sync codex-watch '$normal_pane' '$TEST_HOME' 0 fallback" &
+  watcher_pid="$!"
+  TEST_PIDS+=("$watcher_pid")
+  wait_for_pane_option "$normal_pane" @ai_base_title "thread title smoke"
+  tmux_i set-option -p -t "$normal_pane" @ai_base_title ""
+  wait_for_pane_option "$normal_pane" @ai_base_title "thread title smoke"
+  kill "$watcher_pid" >/dev/null 2>&1 || true
+  wait "$watcher_pid" >/dev/null 2>&1 || true
 fi
 
 if command -v jq >/dev/null 2>&1; then

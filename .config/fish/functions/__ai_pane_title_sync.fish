@@ -180,7 +180,13 @@ function __ai_pane_title_sync_codex_watch --argument-names pane_id cwd started_a
                 set title (__ai_pane_title_sync_codex_thread_title "$session_file")
                 set source codex-thread
             end
-            if test -n "$title"; and test "$title" != "$last_title"
+            set -l current_base_title (tmux show-option -pqv -t "$pane_id" @ai_base_title 2>/dev/null)
+            set -l current_source (tmux show-option -pqv -t "$pane_id" @ai_title_source 2>/dev/null)
+            if test -n "$title"; and begin
+                    test "$title" != "$last_title"
+                    or test "$current_base_title" != "$title"
+                    or test "$current_source" != "$source"
+                end
                 __ai_pane_title_sync_set_base "$pane_id" "$title" "$source"
                 set last_title "$title"
             end
