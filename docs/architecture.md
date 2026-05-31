@@ -193,7 +193,7 @@ tmux の `pane-scrollbars` は copy/view mode で右端に 1 カラムの scroll
 `after-new-window` / `prefix+G` に限定する。`pane-focus-in` / `after-select-window` などの hook から
 sidebar 作成や layout 変更は行わない。
 
-tmux 設定や sidebar 挙動の検証では、default tmux server に対して `kill-server` を実行しない。
+tmux 設定や sidebar 挙動の検証では、default tmux server を丸ごと終了する操作を実行しない。
 動作検証は `.config/tmux/test-ai-sidebars-isolated.sh` を使い、専用 socket の disposable server
 だけを作成・破棄する。
 

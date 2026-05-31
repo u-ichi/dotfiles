@@ -30,6 +30,21 @@ function __claude_physical_path
     return 1
 end
 
+function __claude_sync_repo_on_startup --argument-names repo
+    set -l branch (git -C "$repo" branch --show-current 2>/dev/null)
+    if test "$branch" = main
+        echo "main を最新に pull しています..."
+        if not git -C "$repo" pull --ff-only origin main 2>/dev/null
+            echo "⚠ pull に失敗しました（オフラインまたはコンフリクト）。現在の状態で続行します。"
+        end
+    else
+        echo "origin/main を取得しています..."
+        if not git -C "$repo" fetch origin main 2>/dev/null
+            echo "⚠ fetch に失敗しました（オフライン等）。現在の状態で続行します。"
+        end
+    end
+end
+
 function __claude_fallback_title
     set -l title (basename "$PWD")
     set -l argc (count $argv)
@@ -101,6 +116,9 @@ function claude --description "Claude Code を worktree モードで起動（既
         __claude_run $argv
         return
     end
+    set repo (__claude_physical_path "$repo")
+
+    __claude_sync_repo_on_startup "$repo"
 
     set -l wt_dir "$repo/.claude/worktrees"
     set -l choices
@@ -131,10 +149,6 @@ function claude --description "Claude Code を worktree モードで起動（既
     if test -z "$sel" -o "$sel" = s
         __claude_run $argv
     else if string match -qr '^\d+$' "$sel"; and test (count $choices) -gt 0 -a "$sel" -ge 1 -a "$sel" -le (count $choices)
-        echo "main を最新に pull しています..."
-        if not git -C "$repo" pull origin main --ff-only 2>/dev/null
-            echo "⚠ pull に失敗しました（オフラインまたはコンフリクト）。現在の状態で続行します。"
-        end
         __claude_run --worktree $choices[$sel] $argv
     else
         # non-ASCII characters detected → generate English worktree name via LLM
@@ -168,10 +182,6 @@ function claude --description "Claude Code を worktree モードで起動（既
                     return 1
                 end
             end
-        end
-        echo "main を最新に pull しています..."
-        if not git -C "$repo" pull origin main --ff-only 2>/dev/null
-            echo "⚠ pull に失敗しました（オフラインまたはコンフリクト）。現在の状態で続行します。"
         end
         __claude_run --worktree $sel $argv
     end
