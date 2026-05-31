@@ -228,6 +228,13 @@ if [ -n "$fixed_title" ] || [ "$base_title" != "new-project" ]; then
 fi
 
 if command -v jq >/dev/null 2>&1 && command -v sqlite3 >/dev/null 2>&1; then
+  tmux_i set-option -p -t "$normal_pane" @ai_app codex
+  tmux_i select-pane -t "$normal_pane" -T 'dotfiles | aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa | Context 1% used'
+  tmux_i set-option -p -t "$normal_pane" @ai_codex_session_file "$codex_session_a"
+  tmux_i set-option -p -t "$normal_pane" @ai_base_title "new-project"
+  tmux_i set-option -p -t "$normal_pane" @ai_title_source codex-fallback
+  wait_for_pane_option "$normal_pane" @ai_base_title "thread title smoke"
+
   tmux_i select-pane -t "$normal_pane" -T 'dotfiles | aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa | Context 1% used'
   tmux_i set-option -p -t "$normal_pane" @ai_codex_session_file "$codex_session_a"
   tmux_i set-option -p -t "$normal_pane" @ai_base_title ""
@@ -344,6 +351,29 @@ CLAUDE_JSONL2
 fi
 
 sidebar_pane="$(tmux_i list-panes -t 'ai-sidebar-test:1' -F '#{pane_id}	#{@ai_sidebar}' | awk -F '\t' '$2 == "1" { print $1; exit }')"
+tmux_i set-option -p -t "$normal_pane" @agmsg_display_identity worker1
+tmux_i set-option -p -t "$normal_pane" @ai_base_title "plain sidebar title"
+sidebar_output=""
+sidebar_title_seen=0
+for _ in {1..30}; do
+  sidebar_output="$(tmux_i capture-pane -p -t "$sidebar_pane")"
+  if printf '%s\n' "$sidebar_output" | grep -Fq "plain sidebar title"; then
+    sidebar_title_seen=1
+    break
+  fi
+  sleep 0.1
+done
+if [ "$sidebar_title_seen" -ne 1 ]; then
+  echo "ERROR: sidebar did not render test pane title" >&2
+  printf '%s\n' "$sidebar_output" >&2
+  exit 1
+fi
+if printf '%s\n' "$sidebar_output" | grep -Fq "worker1"; then
+  echo "ERROR: sidebar should not prefix agmsg identity in pane display" >&2
+  printf '%s\n' "$sidebar_output" >&2
+  exit 1
+fi
+
 tmux_i resize-pane -t "$sidebar_pane" -x 4
 TMUX="$SOCKET,0,0" "$SCRIPT_DIR/ensure-ai-sidebars.sh"
 sidebar_width="$(tmux_i display-message -p -t "$sidebar_pane" '#{pane_width}')"

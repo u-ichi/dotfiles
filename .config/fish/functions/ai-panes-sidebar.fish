@@ -300,6 +300,41 @@ function __ai_codex_native_goal_row --argument-names session_file
     command sqlite3 -separator \t "$db" "select status, objective from thread_goals where thread_id = '$escaped_id' limit 1;" 2>/dev/null | command head -n 1
 end
 
+function __ai_codex_thread_title --argument-names session_file
+    command -q sqlite3; or return 1
+    test -f "$session_file"; or return 1
+
+    set -l db "$HOME/.codex/state_5.sqlite"
+    test -f "$db"; or return 1
+
+    set -l escaped_file (string replace -a "'" "''" -- "$session_file")
+    set -l query "select title from threads where rollout_path = '$escaped_file'"
+    set -l session_id (__ai_codex_session_id_from_file "$session_file")
+    if test -n "$session_id"
+        set -l escaped_id (string replace -a "'" "''" -- "$session_id")
+        set query "$query or id = '$escaped_id'"
+    end
+    set query "$query order by updated_at desc limit 1;"
+
+    set -l title (command sqlite3 "$db" "$query" 2>/dev/null | command head -n 1)
+    string trim -- (string replace -ar '[\t\r\n]+' ' ' -- "$title")
+end
+
+function __ai_codex_title_for_session --argument-names session_file
+    test -f "$session_file"; or return 1
+
+    set -l native_goal_row (__ai_codex_native_goal_row "$session_file")
+    if test -n "$native_goal_row"
+        set -l native_goal_parts (string split -m 1 \t -- "$native_goal_row")
+        if test "$native_goal_parts[1]" = active; and test (count $native_goal_parts) -ge 2
+            string trim -- (string replace -ar '[\t\r\n]+' ' ' -- "$native_goal_parts[2]")
+            return 0
+        end
+    end
+
+    __ai_codex_thread_title "$session_file"
+end
+
 function __ai_claude_task_lines --argument-names session_file max_line_chars max_display_lines
     if not command -q jq
         return 1
@@ -810,7 +845,9 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
     # v33: 重複判定で active pane 表示名も sidebar 幅に短縮してから比較する。
     # v34: 重複時も詳細ヘッダは残し、plan/task 側の重複上位目標行だけ省く。
     # v35: 重複時の詳細ヘッダに色付き上位目標行を再利用する。
-    set -l state_version 36
+    # v39: sidebar writer でも Codex pane の base title を復旧する。
+    # v40: agmsg identity は pane border 専用にし、sidebar 表示名からは外す。
+    set -l state_version 40
     while true
         # ===== Section 1: 初期化 (loop 毎の状態リセット) =====
         set -l lines
@@ -834,7 +871,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
         # tmux list-panes で全 pane の option を 1 回でまとめて取得する (毎 pane に
         # show-option を打つより速い)。format string の field 数を変えたら、下の
         # `string split -m N` (parts 配列の総数 - 1) も合わせて更新すること。
-        set -l raw (tmux list-panes -s -F '#{window_index}.#{pane_index}	#{pane_title}	#{@fixed_title}	#{@ai_base_title}	#{@ai_sidebar}	#{pane_current_path}	#{window_index}	#{@ai_display_index}	#{pane_current_command}	#{pane_id}	#{@ai_state}	#{@ai_state_since}	#{@ai_state_version}	#{pane_active}	#{window_id}	#{@ai_codex_started_at}	#{@ai_codex_session_file}	#{@ai_codex_cwd}	#{@ai_app}	#{@ai_claude_session_id}	#{@ai_claude_cwd}	#{window_name}' 2>/dev/null)
+        set -l raw (tmux list-panes -s -F '#{window_index}.#{pane_index}	#{pane_title}	#{@fixed_title}	#{@ai_base_title}	#{@ai_sidebar}	#{pane_current_path}	#{window_index}	#{@ai_display_index}	#{pane_current_command}	#{pane_id}	#{@ai_state}	#{@ai_state_since}	#{@ai_state_version}	#{pane_active}	#{window_id}	#{@ai_codex_started_at}	#{@ai_codex_session_file}	#{@ai_codex_cwd}	#{@ai_app}	#{@ai_claude_session_id}	#{@ai_claude_cwd}	#{window_name}	#{@ai_title_source}' 2>/dev/null)
         # 自分自身の @ai_sidebar を見て writer 判定する。
         # 旧: session 内最初の writer だけ writer 認定 → 2 つ目以降の sidebar pane
         # (window 2, 3, ... の writer) が is_writer=0 のまま動き、state_version self-check
@@ -851,7 +888,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
         #   - sidebar と同じ window で active な Codex/Claude pane を active_* 変数に記録
         set -l entries
         for line in $raw
-            set -l parts (string split -m 21 \t -- $line)
+            set -l parts (string split -m 22 \t -- $line)
             set -l loc $parts[1]
             set -l title $parts[2]
             set -l fixed_title $parts[3]
@@ -873,6 +910,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             set -l claude_session_id $parts[20]
             set -l claude_cwd $parts[21]
             set -l window_name $parts[22]
+            set -l title_source $parts[23]
             set -l codex_session_id (__ai_codex_session_id_from_title "$title")
 
             test "$loc" = (tmux display-message -p -t "$TMUX_PANE" '#{window_index}.#{pane_index}' 2>/dev/null); and continue
@@ -904,9 +942,48 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             else
                 set display $title
             end
-
             set -l codex_session_path "$path"
             test -n "$codex_cwd"; and set codex_session_path "$codex_cwd"
+
+            if test "$is_writer" = 1; and test "$is_codex_console" = 1
+                set -l resolved_session_file "$codex_session_file"
+                if test -n "$codex_session_id"
+                    if test -n "$resolved_session_file"
+                        if not test -f "$resolved_session_file"
+                            set resolved_session_file ""
+                        else if test (__ai_codex_session_id_from_file "$resolved_session_file") != "$codex_session_id"
+                            set resolved_session_file ""
+                            tmux set-option -p -t "$pane_id" @ai_codex_session_file "" 2>/dev/null
+                        end
+                    end
+                    if test -z "$resolved_session_file"
+                        set resolved_session_file (__ai_codex_session_file_by_id "$codex_session_id")
+                    end
+                else if string match -qr '^[0-9]+$' -- "$codex_started_at"
+                    if test -n "$resolved_session_file"; and begin; not test -f "$resolved_session_file"; or not __ai_codex_session_matches_started_at "$resolved_session_file" "$codex_started_at"; end
+                        set resolved_session_file ""
+                        tmux set-option -p -t "$pane_id" @ai_codex_session_file "" 2>/dev/null
+                    end
+                    if test -z "$resolved_session_file"
+                        set resolved_session_file (__ai_codex_find_session_file "$codex_session_path" "$codex_started_at")
+                    end
+                end
+
+                if test -n "$resolved_session_file"
+                    if test "$resolved_session_file" != "$codex_session_file"
+                        tmux set-option -p -t "$pane_id" @ai_codex_session_file "$resolved_session_file" 2>/dev/null
+                    end
+                    set -l resolved_title (__ai_codex_title_for_session "$resolved_session_file")
+                    if test -n "$resolved_title"; and begin
+                            test "$base_title" != "$resolved_title"
+                            or not contains -- "$title_source" codex-goal codex-thread codex-sidebar
+                        end
+                        tmux set-option -p -t "$pane_id" @ai_base_title "$resolved_title" 2>/dev/null
+                        tmux set-option -p -t "$pane_id" @ai_title_source codex-sidebar 2>/dev/null
+                        tmux set-option -p -t "$pane_id" @ai_title_updated_at (date +%s) 2>/dev/null
+                    end
+                end
+            end
 
             set -l visible
             set -l codex_user_waiting 0
