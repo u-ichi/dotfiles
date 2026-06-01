@@ -75,20 +75,23 @@ def reflow_soft_wraps(text: str, pane_width: int | None) -> str:
     return "".join(result)
 
 
-def load_tmux_buffer(text: str) -> None:
+def load_tmux_buffer(text: str) -> bool:
     if not os.environ.get("TMUX"):
-        return
+        return False
     try:
         subprocess.run(
-            ["tmux", "load-buffer", "-"],
+            ["tmux", "load-buffer", "-w", "-"],
             input=text,
             text=True,
-            check=False,
+            check=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
+        return True
     except OSError:
-        return
+        return False
+    except subprocess.CalledProcessError:
+        return False
 
 
 def write_clipboard(text: str) -> int:
@@ -96,10 +99,12 @@ def write_clipboard(text: str) -> int:
         sys.stdout.write(text)
         return 0
 
-    load_tmux_buffer(text)
+    tmux_clipboard_ok = load_tmux_buffer(text)
     try:
         subprocess.run(["pbcopy"], input=text, text=True, check=True)
     except (OSError, subprocess.CalledProcessError) as exc:
+        if tmux_clipboard_ok:
+            return 0
         print(f"pbcopy failed: {exc}", file=sys.stderr)
         return 1
     return 0
