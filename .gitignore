@@ -7,6 +7,10 @@ CLAUDE.local.md
 .codex/worktrees/
 .agents/skills/
 
+# 作業生成物
+/output/
+/tmp/
+
 # macOS
 .DS_Store
 .AppleDouble
