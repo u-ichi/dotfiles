@@ -200,6 +200,33 @@ function __codex_dotfiles_agent_add_dir --argument-names launch_pwd target_path
     python3 -c 'import os, sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))' "$agent_root" "$launch_pwd" 2>/dev/null
 end
 
+function __codex_explicit_sandbox_mode
+    set -l expect_mode 0
+
+    for arg in $argv
+        if test $expect_mode -eq 1
+            echo "$arg"
+            return 0
+        end
+
+        switch $arg
+            case -s --sandbox
+                set expect_mode 1
+            case '--sandbox=*'
+                string replace -- '--sandbox=' '' "$arg"
+                return 0
+            case '-s=*'
+                string replace -- '-s=' '' "$arg"
+                return 0
+            case --dangerously-bypass-approvals-and-sandbox
+                echo danger-full-access
+                return 0
+        end
+    end
+
+    return 1
+end
+
 function __codex_set_pane_base_title
     if not set -q TMUX
         return
@@ -237,7 +264,15 @@ function __codex_run_interactive
         end
     end
     if test -n "$dotfiles_agent_add_dir"
-        command codex --add-dir "$dotfiles_agent_add_dir" $normalized_argv
+        set -l sandbox_mode (__codex_explicit_sandbox_mode $normalized_argv)
+        switch "$sandbox_mode"
+            case read-only
+                command codex $normalized_argv
+            case workspace-write danger-full-access
+                command codex --add-dir "$dotfiles_agent_add_dir" $normalized_argv
+            case '*'
+                command codex -s workspace-write --add-dir "$dotfiles_agent_add_dir" $normalized_argv
+        end
     else
         command codex $normalized_argv
     end
