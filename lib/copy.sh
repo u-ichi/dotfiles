@@ -184,3 +184,21 @@ sync_files() {
     copy_item "$src" "$dest"
   done
 }
+
+cleanup_legacy_git_config_symlink() {
+  local legacy="$HOME/.config/git/config"
+  local managed="$DOTFILES_DIR/.config/git/config"
+
+  [ -L "$legacy" ] || return
+
+  local target
+  target="$(_resolve_link_target "$legacy")"
+
+  if [[ "$target" == "$DOTFILES_DIR"* ]] || { [ -e "$target" ] && cmp -s "$managed" "$target"; }; then
+    echo "移行:     $legacy (旧 Git config リンクを削除)"
+    rm "$legacy"
+  else
+    echo "移行:     $legacy (管理外リンクをバックアップ)"
+    backup_path "$legacy"
+  fi
+}

@@ -124,6 +124,10 @@ fi
 echo "=== dotfiles 同期 ==="
 echo ""
 
+# === 旧 Git config リンク移行 ===
+cleanup_legacy_git_config_symlink
+echo ""
+
 # === ファイル権限 ===
 echo "--- ファイル権限の修復 ---"
 fix_permissions
