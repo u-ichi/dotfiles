@@ -81,6 +81,7 @@ export TERM=xterm-256color
 export AGMSG_TMUX_SOCKET="$SOCKET"
 export AGMSG_SKILL_DIR="$FAKE_SKILL"
 export AGMSG_TEST_CALL_LOG="$CALL_LOG"
+unset TMUX TMUX_PANE AGMSG_TMUX_CURRENT_PANE
 mkdir -p "$TEST_HOME/.config"
 ln -s "$SCRIPT_DIR" "$TEST_HOME/.config/tmux"
 

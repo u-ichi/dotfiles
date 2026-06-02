@@ -189,7 +189,7 @@ cleanup_legacy_git_config_symlink() {
   local legacy="$HOME/.config/git/config"
   local managed="$DOTFILES_DIR/.config/git/config"
 
-  [ -L "$legacy" ] || return
+  [ -L "$legacy" ] || return 0
 
   local target
   target="$(_resolve_link_target "$legacy")"
