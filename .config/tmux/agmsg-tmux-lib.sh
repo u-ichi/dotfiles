@@ -226,50 +226,68 @@ agmsg_tmux_identity_namespace() {
   esac
 }
 
+agmsg_tmux_window_has_controller_identity() {
+  local window_id="$1"
+  local target_pane="${2:-}"
+
+  agmsg_tmux_cmd list-panes -a \
+    -F '#{window_id}	#{pane_id}	#{@ai_sidebar}	#{@agmsg_active_identity}' 2>/dev/null |
+    awk -F '\t' -v target_window="$window_id" -v target_pane="$target_pane" '
+      $1 == target_window && $2 != target_pane && $3 != "1" && $4 ~ /^controller[0-9]+$/ {
+        found = 1
+      }
+      END { if (found) print "1"; else print "0" }
+    '
+}
+
+agmsg_tmux_next_worker_identity_for_window() {
+  local window_id="$1"
+  local current max_existing next
+
+  current="$(agmsg_tmux_cmd show-option -wqv -t "$window_id" @agmsg_next_worker_seq 2>/dev/null || true)"
+  case "$current" in
+    ''|*[!0-9]*) current=1 ;;
+  esac
+
+  max_existing="$(
+    agmsg_tmux_cmd list-panes -a \
+      -F '#{window_id}	#{@ai_sidebar}	#{@agmsg_active_identity}' 2>/dev/null |
+      awk -F '\t' -v target_window="$window_id" '
+        $1 == target_window && $2 != "1" && $3 ~ /^worker[0-9]+$/ {
+          n = substr($3, 7) + 0
+          if (n > max) max = n
+        }
+        END { print max + 0 }
+      '
+  )"
+  next="$current"
+  if [ "$next" -le "$max_existing" ]; then
+    next=$((max_existing + 1))
+  fi
+
+  agmsg_tmux_cmd set-option -w -t "$window_id" @agmsg_next_worker_seq "$((next + 1))" >/dev/null
+  printf 'worker%s\n' "$next"
+}
+
 agmsg_tmux_initial_identity_for_target() {
   local target="${1:-}"
   local type="$2"
-  local pane_id window_id identity
+  local pane_id window_id identity has_controller
 
   pane_id="$(agmsg_tmux_pane_id_for_target "$target")"
   window_id="$(agmsg_tmux_format "$target" '#{window_id}' 2>/dev/null)"
 
-  identity="$(
-    agmsg_tmux_cmd list-panes -a \
-      -F '#{window_id}	#{pane_id}	#{@ai_sidebar}	#{@ai_app}	#{pane_current_command}	#{pane_title}' 2>/dev/null |
-      awk -F '\t' -v target_window="$window_id" -v target_pane="$pane_id" '
-        $1 == target_window {
-          if ($3 == "1") {
-            next
-          }
-          type = ""
-          if ($4 == "codex") {
-            type = "codex"
-          } else if ($4 == "claude" || $4 == "claude-code") {
-            type = "claude-code"
-          } else if (($5 " " $6) ~ /codex/) {
-            type = "codex"
-          } else if (($5 " " $6) ~ /claude/) {
-            type = "claude-code"
-          }
-          if (type == "") {
-            next
-          }
-          pane_count += 1
-          if ($2 == target_pane) {
-            if (pane_count == 1) {
-              print "controller1"
-            } else if (pane_count >= 2) {
-              print "worker" (pane_count - 1)
-            }
-            exit
-          }
-        }
-      '
-  )"
-
+  identity="$(agmsg_tmux_format "$target" '#{@agmsg_active_identity}' 2>/dev/null || true)"
   if [ -n "$identity" ]; then
     printf '%s\n' "$identity"
+    return 0
+  fi
+
+  has_controller="$(agmsg_tmux_window_has_controller_identity "$window_id" "$pane_id")"
+  if [ "$has_controller" != "1" ]; then
+    printf 'controller1\n'
+  elif [ "$type" = "codex" ] || [ "$type" = "claude-code" ]; then
+    agmsg_tmux_next_worker_identity_for_window "$window_id"
   else
     agmsg_tmux_agent_name "$type" "$pane_id"
   fi

@@ -179,15 +179,50 @@ if [ "$(tmux_i show-option -pqv -t "$third_worker_pane" @agmsg_identity_source)"
   echo "ERROR: third pane identity source was not auto" >&2
   exit 1
 fi
+inserted_worker_pane="$(tmux_i split-window -b -t "$second_pane" -c "$PROJECT_C" -P -F '#{pane_id}' 'sleep 60')"
+tmux_i set-option -p -t "$inserted_worker_pane" @ai_app codex
+"$SCRIPT_DIR/agmsg-tmux-join.sh" --target "$inserted_worker_pane" >/dev/null
+worker1_count="$(
+  tmux_i list-panes -t "$first_window" \
+    -F '#{@agmsg_active_identity}	#{@agmsg_identity_source}' |
+    awk -F '\t' '$1 == "worker1" && $2 == "auto" { count += 1 } END { print count + 0 }'
+)"
+if [ "$worker1_count" != "1" ]; then
+  echo "ERROR: auto identity join left duplicate worker1 identities" >&2
+  tmux_i list-panes -t "$first_window" -F '#{pane_id}	#{@ai_app}	#{@agmsg_active_identity}	#{@agmsg_identity_source}' >&2
+  exit 1
+fi
+if [ "$(tmux_i show-option -pqv -t "$inserted_worker_pane" @agmsg_active_identity)" != "worker3" ]; then
+  echo "ERROR: inserted worker pane should get the next stable worker identity" >&2
+  exit 1
+fi
+if [ "$(tmux_i show-option -pqv -t "$second_pane" @agmsg_active_identity)" != "worker1" ]; then
+  echo "ERROR: existing worker1 pane was renamed after inserted worker join" >&2
+  exit 1
+fi
+if [ "$(tmux_i show-option -pqv -t "$third_worker_pane" @agmsg_active_identity)" != "worker2" ]; then
+  echo "ERROR: existing worker2 pane was renamed after inserted worker join" >&2
+  exit 1
+fi
+tmux_i kill-pane -t "$inserted_worker_pane"
+"$SCRIPT_DIR/agmsg-tmux-sync-active-identity.sh" "$first_pane"
+if [ "$(tmux_i show-option -pqv -t "$second_pane" @agmsg_active_identity)" != "worker1" ]; then
+  echo "ERROR: identity sync renamed worker1 after removing inserted pane" >&2
+  exit 1
+fi
+if [ "$(tmux_i show-option -pqv -t "$third_worker_pane" @agmsg_active_identity)" != "worker2" ]; then
+  echo "ERROR: identity sync renamed worker2 after removing inserted pane" >&2
+  exit 1
+fi
 tmux_i set-option -p -t "$third_worker_pane" @agmsg_active_identity worker3
 tmux_i set-option -p -t "$third_worker_pane" @agmsg_display_identity worker3
 "$SCRIPT_DIR/agmsg-tmux-sync-active-identity.sh" "$first_pane"
-if [ "$(tmux_i show-option -pqv -t "$third_worker_pane" @agmsg_active_identity)" != "worker2" ]; then
-  echo "ERROR: auto identity sync did not repair stale worker numbering" >&2
+if [ "$(tmux_i show-option -pqv -t "$third_worker_pane" @agmsg_active_identity)" != "worker3" ]; then
+  echo "ERROR: auto identity sync renamed an existing worker identity" >&2
   exit 1
 fi
-if [ "$(tmux_i show-option -pqv -t "$third_worker_pane" @agmsg_display_identity)" != "worker2" ]; then
-  echo "ERROR: auto display identity sync did not repair stale worker numbering" >&2
+if [ "$(tmux_i show-option -pqv -t "$third_worker_pane" @agmsg_display_identity)" != "worker3" ]; then
+  echo "ERROR: auto display identity sync renamed an existing worker identity" >&2
   exit 1
 fi
 
@@ -216,7 +251,7 @@ second_loc="$(tmux_i display-message -p -t "$second_pane" '#{window_index}'):$se
 third_worker_loc="$(tmux_i display-message -p -t "$third_worker_pane" '#{window_index}'):$third_worker_visible"
 expected_peer_codex=$'\t'"$first_loc"$'\t''controller1'$'\t'"$first_pane"$'\t''codex'$'\t'"$PROJECT_A"
 expected_peer_claude=$'\t'"$second_loc"$'\t''worker1'$'\t'"$second_pane"$'\t''claude-code'$'\t'"$PROJECT_B"
-expected_peer_third_worker=$'\t'"$third_worker_loc"$'\t''worker2'$'\t'"$third_worker_pane"$'\t''codex'$'\t'"$PROJECT_C"
+expected_peer_third_worker=$'\t'"$third_worker_loc"$'\t''worker3'$'\t'"$third_worker_pane"$'\t''codex'$'\t'"$PROJECT_C"
 if ! printf '%s\n' "$peers" | grep -Fq "$expected_peer_codex"; then
   echo "ERROR: codex peer was not listed" >&2
   printf '%s\n' "$peers" >&2
@@ -349,13 +384,14 @@ if [ "$team_first" = "$team_second" ]; then
 fi
 second_window_worker_pane="$(tmux_i split-window -t "$third_pane" -c "$PROJECT_B" -P -F '#{pane_id}' 'sleep 60')"
 tmux_i set-option -p -t "$second_window_worker_pane" @ai_app codex
-"$SCRIPT_DIR/agmsg-tmux-sync-active-identity.sh"
+"$SCRIPT_DIR/agmsg-tmux-join.sh" --target "$third_pane" --skip-delivery >/dev/null
+"$SCRIPT_DIR/agmsg-tmux-join.sh" --target "$second_window_worker_pane" --skip-delivery >/dev/null
 if [ "$(tmux_i show-option -pqv -t "$third_pane" @agmsg_active_identity)" != "controller1" ]; then
-  echo "ERROR: all-window identity sync did not reset numbering per window" >&2
+  echo "ERROR: second window controller did not get controller1" >&2
   exit 1
 fi
 if [ "$(tmux_i show-option -pqv -t "$second_window_worker_pane" @agmsg_active_identity)" != "worker1" ]; then
-  echo "ERROR: second window worker was not numbered from worker1" >&2
+  echo "ERROR: second window worker did not get worker1" >&2
   exit 1
 fi
 second_window_peers="$("$SCRIPT_DIR/agmsg-tmux-peers.sh" --target "$third_pane")"

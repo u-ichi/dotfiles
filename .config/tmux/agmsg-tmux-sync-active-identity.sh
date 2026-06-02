@@ -15,16 +15,12 @@ if [ -n "$target" ]; then
   window_filter="$(agmsg_tmux_format "$target" '#{window_id}' 2>/dev/null || true)"
 fi
 
-while IFS=$'\t' read -r pane_id identity; do
+while IFS=$'\t' read -r pane_id action; do
   [ -n "$pane_id" ] || continue
-  if [ "$identity" = "__clear__" ]; then
+  if [ "$action" = "__clear__" ]; then
     agmsg_tmux_cmd set-option -p -t "$pane_id" @agmsg_active_identity "" 2>/dev/null || true
     agmsg_tmux_cmd set-option -p -t "$pane_id" @agmsg_display_identity "" 2>/dev/null || true
     agmsg_tmux_cmd set-option -p -t "$pane_id" @agmsg_identity_source "" 2>/dev/null || true
-  else
-    agmsg_tmux_cmd set-option -p -t "$pane_id" @agmsg_active_identity "$identity" 2>/dev/null || true
-    agmsg_tmux_cmd set-option -p -t "$pane_id" @agmsg_display_identity "$identity" 2>/dev/null || true
-    agmsg_tmux_cmd set-option -p -t "$pane_id" @agmsg_identity_source "auto" 2>/dev/null || true
   fi
 done < <(
   agmsg_tmux_cmd list-panes -a \
@@ -34,30 +30,6 @@ done < <(
         if ($3 == "1") {
           print $2 "\t__clear__"
           next
-        }
-        type = ""
-        if ($4 == "codex") {
-          type = "codex"
-        } else if ($4 == "claude" || $4 == "claude-code") {
-          type = "claude-code"
-        } else if (($5 " " $6) ~ /codex/) {
-          type = "codex"
-        } else if (($5 " " $6) ~ /claude/) {
-          type = "claude-code"
-        }
-        if (type != "") {
-          pane_count[$1] += 1
-          if (pane_count[$1] == 1) {
-            identity = "controller1"
-          } else if (pane_count[$1] >= 2) {
-            identity = "worker" (pane_count[$1] - 1)
-          } else {
-            identity = type "-" $2
-          }
-          if ($8 == "manual") {
-            next
-          }
-          print $2 "\t" identity
         }
       }
     '
