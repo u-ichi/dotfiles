@@ -554,6 +554,8 @@ function __ai_codex_signal_line_state --argument-names line
         printf '%s\n' working
     else if string match -q '*background terminal running*' -- "$line"
         printf '%s\n' working
+    else if string match -qr '([0-9]+ monitor(s)? still running|[·|] [0-9]+ monitor(s)? [·|])' -- "$line"
+        printf '%s\n' working
     else if string match -q '*Press enter to confirm or esc to cancel*' -- "$line"
         printf '%s\n' waiting
     else if string match -q '*Would you like to run the following command?*' -- "$line"
@@ -590,6 +592,13 @@ function __ai_claude_signal_line_state --argument-names line
     # diff 出力行を誤検知シグナルから除外する
     if string match -qr '^\s*(diff --git|index |--- |\+\+\+ |@@|[+-])' -- "$line"
         return 1
+    end
+
+    # Claude Code は prompt が戻っていても background monitor が動き続けることがある。
+    # この状態は入力待ちではなく処理中として sidebar に出す。
+    if string match -qr '([0-9]+ monitor(s)? still running|[·|] [0-9]+ monitor(s)? [·|])' -- "$line"
+        printf '%s\n' working
+        return 0
     end
 
     # AskUserQuestion (Submit プロンプト) の footer。
@@ -772,6 +781,26 @@ function __ai_notify_title --argument-names app
     end
 end
 
+function __ai_codex_goal_active_for_notification --argument-names session_file
+    if test -n "$session_file"
+        set -l native_goal_row (__ai_codex_native_goal_row "$session_file")
+        if test -n "$native_goal_row"
+            set -l native_goal_parts (string split -m 1 \t -- "$native_goal_row")
+            if test "$native_goal_parts[1]" = active
+                return 0
+            end
+        end
+    end
+
+    for line in $argv[2..-1]
+        if string match -qr '(Pursuing goal|/goal active)' -- "$line"
+            return 0
+        end
+    end
+
+    return 1
+end
+
 function __ai_notify_state_change --argument-names pane_id new_state old_state display app detail
     command -q terminal-notifier; or return 0
 
@@ -849,7 +878,10 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
     # v40: agmsg identity は pane border 専用にし、sidebar 表示名からは外す。
     # v41: agmsg unread summary を sidebar 表示名へ付与する。
     # v42: 完了通知音を Purr → Submarine に変更 (耳に残りにくいマイルドな音へ)。
-    set -l state_version 42
+    # v43: Claude Code の background monitor 実行中は prompt が戻っていても working と判定。
+    # v44: Codex 判定側でも monitor 実行中を working と判定。
+    # v45: Codex native goal / Pursuing goal 中の working→idle 完了通知を抑制。
+    set -l state_version 45
     while true
         # ===== Section 1: 初期化 (loop 毎の状態リセット) =====
         set -l lines
@@ -1004,11 +1036,14 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             # Claude pane 側でも capture-pane で AskUserQuestion / Permission prompt を拾う。
             # title だけだと braille アニメ文字で working と誤判定されるため。
             set -l claude_user_waiting 0
+            set -l claude_working 0
             if test "$is_claude_console" = 1
                 set visible (tmux capture-pane -p -J -t "$pane_id" 2>/dev/null | tail -24)
                 set -l claude_visible_state (printf '%s\n' $visible | __ai_claude_visible_state)
                 if test "$claude_visible_state" = waiting
                     set claude_user_waiting 1
+                else if test "$claude_visible_state" = working
+                    set claude_working 1
                 end
             end
 
@@ -1027,10 +1062,12 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             else if test "$claude_user_waiting" = 1
                 # AskUserQuestion / Permission prompt 表示中は braille title より優先する
                 set detected_state waiting
-            else if string match -q '✳*' -- $title
-                set detected_state waiting
             else if test "$codex_working" = 1
                 set detected_state working
+            else if test "$claude_working" = 1
+                set detected_state working
+            else if string match -q '✳*' -- $title
+                set detected_state waiting
             else if string match -qr '^[⠀-⣿]' -- $title
                 set detected_state working
             end
@@ -1064,8 +1101,16 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
                     set -l notify_app other
                     test "$is_codex_console" = 1; and set notify_app codex
                     test "$is_claude_console" = 1; and set notify_app claude
-                    set -l notify_detail (__ai_notify_detail "$detected_state" "$notify_app" "$display" $visible)
-                    __ai_notify_state_change "$pane_id" "$detected_state" "$cached_state" "$display" "$notify_app" "$notify_detail"
+                    set -l suppress_notification 0
+                    if test "$notify_app" = codex; and test "$detected_state" = idle
+                        if __ai_codex_goal_active_for_notification "$codex_session_file" $visible
+                            set suppress_notification 1
+                        end
+                    end
+                    if test "$suppress_notification" = 0
+                        set -l notify_detail (__ai_notify_detail "$detected_state" "$notify_app" "$display" $visible)
+                        __ai_notify_state_change "$pane_id" "$detected_state" "$cached_state" "$display" "$notify_app" "$notify_detail"
+                    end
                 end
             end
             # 最終 fallback (上記いずれにも該当しないが state_since が未設定なら "--:--")

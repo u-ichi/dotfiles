@@ -164,8 +164,13 @@ if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; test
   exit 1
 fi
 
-if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; test (printf '%s\n' 'Conversation interrupted - tell the model what to do differently' '• Working (10s • esc to interrupt)' | __ai_codex_visible_state) = working; and test (printf '%s\n' '• Working (10s • esc to interrupt)' '› 対処して' | __ai_codex_visible_state) = working; and test (printf '%s\n' '• Booting MCP server: codex_apps (5m 12s • esc to interrupt)' | __ai_codex_visible_state) = working; and test (printf '%s\n' '• Working (10s • esc to interrupt)' '• Worked for 1m 42s' '› 対処して' | __ai_codex_visible_state) = idle; and test (printf '%s\n' 'Would you like to run the following command?' 'Yes, proceed (y)' | __ai_codex_visible_state) = waiting"; then
+if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; test (printf '%s\n' 'Conversation interrupted - tell the model what to do differently' '• Working (10s • esc to interrupt)' | __ai_codex_visible_state) = working; and test (printf '%s\n' '• Working (10s • esc to interrupt)' '› 対処して' | __ai_codex_visible_state) = working; and test (printf '%s\n' '• Booting MCP server: codex_apps (5m 12s • esc to interrupt)' | __ai_codex_visible_state) = working; and test (printf '%s\n' 'agent [main] | ctx:65% | 1 monitor · ← for agents' '› 対処して' | __ai_codex_visible_state) = working; and test (printf '%s\n' '• Working (10s • esc to interrupt)' '• Worked for 1m 42s' '› 対処して' | __ai_codex_visible_state) = idle; and test (printf '%s\n' 'Would you like to run the following command?' 'Yes, proceed (y)' | __ai_codex_visible_state) = waiting"; then
   echo "ERROR: Codex visible state detection is invalid" >&2
+  exit 1
+fi
+
+if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; test (printf '%s\n' '✻ Baked for 28m 36s · 1 monitor still running' '❯ ' | __ai_claude_visible_state) = working; and test (printf '%s\n' 'agent [main] | ctx:65% | 1 monitor · ← for agents' '❯ ' | __ai_claude_visible_state) = working; and test (printf '%s\n' 'Do you want to proceed?' '❯ 1. Yes' | __ai_claude_visible_state) = waiting"; then
+  echo "ERROR: Claude visible state detection is invalid" >&2
   exit 1
 fi
 
@@ -181,6 +186,11 @@ fi
 
 if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; test (__ai_notify_detail waiting codex repo 'Would you like to run the following command?' 'Yes, proceed (y)') = 'コマンド実行の承認待ち · repo'; and test (__ai_notify_detail idle codex repo '• Worked for 1m 42s' '› 対処して') = '処理完了 (Worked for 1m 42s) · repo'; and test (__ai_notify_detail waiting claude repo 'Do you want to proceed?' '❯ 1. Yes') = 'Do you want to proceed? · repo'"; then
   echo "ERROR: AI notification detail extraction is invalid" >&2
+  exit 1
+fi
+
+if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; __ai_codex_goal_active_for_notification '' 'gpt-5.5 high · agent · Context 55% used · Pursuing goal (44m)'; and __ai_codex_goal_active_for_notification '' '◎ /goal active (10h)'; and not __ai_codex_goal_active_for_notification '' '• Worked for 1m 42s' '› 対処して'"; then
+  echo "ERROR: Codex goal-active notification suppression detection is invalid" >&2
   exit 1
 fi
 

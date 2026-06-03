@@ -144,13 +144,16 @@ sidebar の既定幅は 26 cells とし、既存 pane の kill / resize を自�
 無い場合の再同期用として `ensure-ai-sidebars.sh` を実行する。
 
 状態表示は `working` / `waiting` / `idle` の 3 種類に正規化する。Codex の
-`Working (` / `Waiting for background terminal` / `background terminal running` は `working`、
+`Working (` / `Waiting for background terminal` / `background terminal running`、および
+AI CLI の `monitor still running` / status line 上の `1 monitor` は `working`、
 承認 prompt やユーザーへの明示的な確認文言は `waiting` として扱い、sidebar では `?` で表示する。
 過去の Codex session log で確認した `Press enter to confirm or esc to cancel`、
 `Would you like to run the following command?` + Yes/No メニュー、`実行してよいですか`、
 `承認してください` などを検出対象にする。表示時刻は sidebar 起動時刻や
 window 切替時刻ではなく、状態が変化した時刻を示す。状態と遷移時刻は対象 pane の
 `@ai_state` / `@ai_state_since` option に保持し、`@ai_state_version` で古い形式の値を無効化する。
+Codex の native goal または `Pursuing goal` が active な pane では、1 turn が終わって
+prompt が戻っただけの `working` → `idle` 遷移では完了通知を鳴らさない。
 sidebar 起動時点で過去の遷移時刻を復元できない pane は `--:--` と表示する。
 sidebar 起動後に新規出現した pane は検出時刻を初期時刻として使い、以後の状態変化で現在時刻を入れる。
 Codex 起動直後の `project | Context ... used` title は status line 由来なので、pane border では
