@@ -594,11 +594,45 @@ function __ai_claude_signal_line_state --argument-names line
         return 1
     end
 
-    # Claude Code は prompt が戻っていても background monitor が動き続けることがある。
-    # この状態は入力待ちではなく処理中として sidebar に出す。
-    if string match -qr '([0-9]+ monitor(s)? still running|[·|] [0-9]+ monitor(s)? [·|])' -- "$line"
+    # active turn (Claude が処理中) の spinner 行を working として拾う。処理中は
+    # "✻ … (12m 38s · ↑ 34.3k tokens)" のように live elapsed が括弧付きで出る
+    # (idle 完了行 "Brewed for 23m 14s · …" は括弧が無いので区別できる)。
+    # 版によっては "(esc to interrupt)" が出るのでこれも active として拾う。
+    # title の braille スピナーは idle 中も background monitor で animate するため
+    # 当てにならず、active 判定はこの footer シグナルを唯一の源にする。
+    if string match -qr '\([0-9]+[hms]( [0-9]+[ms])? · ' -- "$line"
         printf '%s\n' working
         return 0
+    end
+    if string match -q '*esc to interrupt*' -- "$line"
+        printf '%s\n' working
+        return 0
+    end
+
+    # Claude Code は prompt が戻っていても background の shell / monitor が動き続ける
+    # ことがある。recap / status 行の "N shell, M monitor still running" や
+    # "N shell, M monitor ·" を解析し、実作業が走っていれば processing として出す。
+    #   - background shell (run_in_background Bash 等の実作業) が 1 本でもあれば working。
+    #   - monitor は agmsg 受信監視・sidebar 等の常駐分が常に 1 本走り続けるため、
+    #     2 本以上 (常駐 + α の実 watch) の時だけ working とする。1 本だけなら idle
+    #     (idle 完了後も ▶ に張り付くのを防ぐ)。
+    set -l is_runline 0
+    if string match -qr 'still running' -- "$line"
+        set is_runline 1
+    else if string match -qr '[·|] [0-9]+ (shells?|monitors?)(, [0-9]+ (shells?|monitors?))? [·|]' -- "$line"
+        set is_runline 1
+    end
+    if test "$is_runline" = 1
+        set -l shell_count (string match -rg '([0-9]+) shells?' -- "$line")
+        set -l monitor_count (string match -rg '([0-9]+) monitors?' -- "$line")
+        if test -n "$shell_count[1]"; and test "$shell_count[1]" -ge 1
+            printf '%s\n' working
+            return 0
+        end
+        if test -n "$monitor_count[1]"; and test "$monitor_count[1]" -ge 2
+            printf '%s\n' working
+            return 0
+        end
     end
 
     # AskUserQuestion (Submit プロンプト) の footer。
@@ -881,7 +915,11 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
     # v43: Claude Code の background monitor 実行中は prompt が戻っていても working と判定。
     # v44: Codex 判定側でも monitor 実行中を working と判定。
     # v45: Codex native goal / Pursuing goal 中の working→idle 完了通知を抑制。
-    set -l state_version 45
+    # v46: Claude の monitor 判定を見直し、常駐分 1 本だけでは working にしない (2 本以上で working)。
+    # v47: Claude の background shell が 1 本でもあれば working と判定 (実作業の取りこぼし対策)。
+    # v48: Claude の working/idle は capture-pane (active spinner / shell / monitor>=2) を唯一の
+    #      源にし、idle 中も animate する title の braille スピナーを working 根拠から外す。
+    set -l state_version 48
     while true
         # ===== Section 1: 初期化 (loop 毎の状態リセット) =====
         set -l lines
@@ -1068,7 +1106,11 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
                 set detected_state working
             else if string match -q '✳*' -- $title
                 set detected_state waiting
-            else if string match -qr '^[⠀-⣿]' -- $title
+            else if string match -qr '^[⠀-⣿]' -- $title; and test "$is_claude_console" != 1
+                # title の braille スピナーは Claude では idle 中も background monitor で
+                # animate するため当てにならない。Claude の working/idle は capture-pane
+                # (__ai_claude_visible_state: active spinner / shell / monitor>=2) を唯一の
+                # 源にし、ここでは Claude を対象外にする。Codex 等は従来どおり title で補う。
                 set detected_state working
             end
 
