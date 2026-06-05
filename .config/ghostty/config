@@ -54,5 +54,16 @@ command = /opt/homebrew/bin/fish
 shell-integration = detect
 desktop-notifications = true
 
+# === タブ切替を内側の tmux に委譲 ===
+# 既定の ctrl+tab=next_tab / ctrl+shift+tab=previous_tab を上書きし、
+# CSI-u (kitty) 形式のエスケープを送出して内側の tmux に window 切替させる。
+# unbind だと Ghostty は ctrl+tab に何も送出せず tmux に届かないため、明示送出する。
+#   \e[9;5u = Ctrl+Tab (keycode 9=Tab, modifier 5=Ctrl)
+#   \e[9;6u = Ctrl+Shift+Tab (modifier 6=Ctrl+Shift)
+# tmux 側 extended-keys always がこれを C-Tab / C-S-Tab として解釈する。
+# Ghostty タブは super+shift+[ / ] で操作可能。
+keybind = ctrl+tab=csi:9;5u
+keybind = ctrl+shift+tab=csi:9;6u
+
 # === 設定リロード ===
 keybind = cmd+shift+comma=reload_config
