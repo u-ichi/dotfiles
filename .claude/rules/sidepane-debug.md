@@ -163,9 +163,45 @@ renderer は root → 直接 child の 1 段下までしか描画しない。深
 「最新タスクが見えない」と言われたら、まず該当 task の `parentTaskId` を確認し、
 **孫以下になっていないか** (= 3 階層 rule 違反になっていないか) を確認する。
 
+## pane の working / idle / waiting 状態判定 (▶ / ■ / ?)
+
+サイドバーの pane 一覧行頭マーカー (▶ working / ■ idle / ? waiting) は、task tree
+とは別系統。各 pane の `capture-pane` 末尾を `__ai_claude_signal_line_state` /
+`__ai_claude_visible_state` が解析し、caller (`ai-panes-sidebar.fish` の
+`set -l detected_state` 周辺) で marker を決める。`@ai_state` pane option に最後の
+判定結果が入るので、`tmux show-option -pqv -t <pane> @ai_state` で writer の判定を
+直接確認できる。
+
+### Claude の working 判定は capture-pane が唯一の源 (title を信じない)
+
+IMPORTANT: Claude pane の title は **idle 中も background monitor が動いていれば
+braille スピナーで animate し続ける**。よって「title が braille だから working」とは
+判定できない (`tmux display-message -p -t <pane> '#{pane_title}'` で確認可)。Claude の
+working/idle は footer/recap 行 (`capture-pane`) を唯一の源にする:
+
+- **active turn (処理中)**: spinner 行 `✻ … (12m 38s · ↑ 34.3k tokens)` のように
+  **括弧付き live elapsed**、または `esc to interrupt` → working。idle 完了行
+  `Brewed for 23m 14s · …` は括弧が無いので区別できる。
+- **background shell**: `N shell … still running` / `· N shell …·` が 1 本でも
+  あれば working (run_in_background Bash 等の実作業)。
+- **monitor**: agmsg 受信監視・sidebar 等の常駐分が**常に 1 本**走り続けるため、
+  `N monitor` が **2 本以上のときだけ** working。1 本だけなら idle。
+
+caller の title-braille fallback (`^[⠀-⣿]` → working) は **Claude console では無効**
+(`is_claude_console != 1` で gate)。Codex 等は従来どおり title で補う。
+
+### 症状別の見方
+
+- 「完了したのに ▶ のまま」→ footer の monitor 数を確認。常駐 1 本だけなら idle が
+  正。▶ のままなら title-braille fallback が効いていないか (= live writer が旧版を
+  抱えていないか、罠 4) を疑う。
+- 「shell が動いてるのに ■」→ footer に `N shell still running` が出ているか確認。
+  shell 検出漏れ。
+
 ## 関連
 
 - `.config/fish/functions/ai-panes-sidebar.fish` — writer 本体 + `__ai_claude_task_lines`
+  + `__ai_claude_signal_line_state` / `__ai_claude_visible_state` (working/idle/waiting 判定)
 - `.config/tmux/ensure-ai-sidebars.sh` — writer respawn
 - claude-code-base-repository: `home/rules/claude/task-progress.md` §4.3 — Goal/Task/SubTask 3 階層制約
 - claude-code-base-repository: `home/hooks/claude/statusline.sh` — statusline (別系統、混同しない)
