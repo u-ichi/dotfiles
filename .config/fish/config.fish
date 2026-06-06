@@ -15,6 +15,12 @@ if status is-interactive
     # bobthefish: git リポジトリ内ではプロジェクトルートより上の親パスを非表示
     set -g theme_show_project_parent no
 
+    # bobthefish: SSH 接続時に既定で出る user@host (例: u1@u1mac) を抑止。
+    # 以前は universal 変数で隠していたが fish 4.3 の universal→global 移行で失われたため、
+    # config に明示してマシン非依存に固定する。
+    set -g theme_display_hostname no
+    set -g theme_display_user no
+
     # pane / 端末タイトル: bobthefish 既定の fish_title は prompt_pwd
     # (~/L/C/.../dotfiles のように親ディレクトリを 1 文字へ省略) を OSC タイトルに出すため、
     # tmux の window タブや端末タイトルに無駄な省略パスが並ぶ。カレントの basename のみを
