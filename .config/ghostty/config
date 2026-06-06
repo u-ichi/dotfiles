@@ -36,6 +36,15 @@ keybind = alt+down=goto_split:bottom
 keybind = alt+up=goto_split:top
 keybind = alt+right=goto_split:right
 
+# === ペインナビゲーション（Cmd+矢印）→ 内側の tmux に委譲 ===
+# tmux 3.6 は Super(Cmd) を Shift と同一視し区別できないため、衝突しにくい
+# Ctrl+Shift+矢印 (modifier 6) の CSI を送出し、tmux 側で select-pane に割当てる。
+#   \e[1;6A/B/D/C = Up/Down/Left/Right (modifier 6 = Ctrl+Shift)
+keybind = cmd+up=csi:1;6A
+keybind = cmd+down=csi:1;6B
+keybind = cmd+left=csi:1;6D
+keybind = cmd+right=csi:1;6C
+
 # === スプリット作成 ===
 keybind = ctrl+s>v=new_split:right
 keybind = ctrl+s>h=new_split:down
