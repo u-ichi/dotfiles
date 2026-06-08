@@ -45,6 +45,20 @@ keybind = cmd+down=csi:1;6B
 keybind = cmd+left=csi:1;6D
 keybind = cmd+right=csi:1;6C
 
+# === ウィンドウ切替（Cmd+数字）→ 内側の tmux に委譲 ===
+# Ghostty の Cmd+数字を tmux へ直接渡すため、衝突しにくい Ctrl+Alt+数字
+# (CSI-u modifier 7) の形で送出する。tmux 側では C-M-1..9 に割当てる。
+#   \e[49;7u = Ctrl+Alt+1 (49 = "1", modifier 7 = Ctrl+Alt)
+keybind = cmd+1=csi:49;7u
+keybind = cmd+2=csi:50;7u
+keybind = cmd+3=csi:51;7u
+keybind = cmd+4=csi:52;7u
+keybind = cmd+5=csi:53;7u
+keybind = cmd+6=csi:54;7u
+keybind = cmd+7=csi:55;7u
+keybind = cmd+8=csi:56;7u
+keybind = cmd+9=csi:57;7u
+
 # === スプリット作成 ===
 keybind = ctrl+s>v=new_split:right
 keybind = ctrl+s>h=new_split:down
