@@ -46,6 +46,42 @@ sync_homebrew() {
   echo ""
 }
 
+# Homebrew Cask の codex バイナリは quarantine + notarization 未対応で
+# macOS 26 Tahoe の Gatekeeper が _dyld_start でハングする (openai/codex#17447)。
+# in-place の xattr -cr / codesign では解消しない (quarantine DB が path を記憶)。
+# コピー + xattr クリア + ad-hoc 再署名で回避する。
+fix_codex_quarantine() {
+  local brew_link="/opt/homebrew/bin/codex"
+  [[ -e "$brew_link" ]] || return 0
+
+  local real_bin
+  real_bin="$(readlink "$brew_link" 2>/dev/null || true)"
+  [[ "$real_bin" == "$HOME/.local/bin/codex" ]] && {
+    echo "済み:     codex quarantine 対策"
+    return 0
+  }
+
+  local cask_bin
+  cask_bin="$(realpath "$brew_link" 2>/dev/null || true)"
+  [[ -x "$cask_bin" ]] || return 0
+
+  local cask_dir
+  cask_dir="$(dirname "$cask_bin")"
+  if ! xattr -l "$cask_dir" 2>/dev/null | grep -q 'com.apple.quarantine'; then
+    echo "済み:     codex quarantine なし"
+    return 0
+  fi
+
+  echo "修正:     codex quarantine 対策 (Caskroom → ~/.local/bin)"
+  mkdir -p "$HOME/.local/bin"
+  cp "$cask_bin" "$HOME/.local/bin/codex"
+  xattr -c "$HOME/.local/bin/codex" 2>/dev/null || true
+  codesign --force --sign - "$HOME/.local/bin/codex" 2>/dev/null || true
+  chmod +x "$HOME/.local/bin/codex"
+  ln -sf "$HOME/.local/bin/codex" "$brew_link"
+  echo "          $brew_link → $HOME/.local/bin/codex"
+}
+
 sync_fish_files() {
   for entry in "${COPY_ENTRIES[@]}"; do
     local src="${entry%%:*}"
@@ -136,6 +172,11 @@ echo ""
 
 # === Homebrew ===
 sync_homebrew
+
+# === Codex quarantine 対策 ===
+echo "--- Codex CLI ---"
+fix_codex_quarantine
+echo ""
 
 # === Hermes Agent ===
 echo "--- Hermes Agent ---"
