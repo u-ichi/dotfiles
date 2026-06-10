@@ -92,6 +92,39 @@ sync_fish_files() {
   done
 }
 
+# Karabiner-Elements は ~/.config/karabiner を FSEvents で監視し karabiner.json の変更を
+# 自動 reload するが、公式 docs によれば (1) 親ディレクトリを作り直すと監視が外れる、
+# (2) karabiner.json を symlink にすると検知しない、という制約がある。install.sh のコピーは
+# 親 dir 再作成やバックアップ mv を挟むことがあり監視が外れ得るため、コピー後に
+# console_user_server を明示再起動して確実に再読み込みさせる。
+# 参考: https://karabiner-elements.pqrs.org/docs/manual/misc/configuration-file-path/
+reload_karabiner() {
+  if ! pgrep -qf karabiner_console_user_server; then
+    echo "スキップ: Karabiner 未起動 (次回 Karabiner 起動時に反映)"
+    return 0
+  fi
+  echo "再読込:   Karabiner console_user_server を再起動"
+  launchctl kickstart -k "gui/$(id -u)/org.pqrs.service.agent.karabiner_console_user_server" 2>/dev/null \
+    || echo "  警告: 再起動に失敗。Karabiner-Elements を手動で再起動してください"
+}
+
+# karabiner.json をコピーし、内容が変わったときだけ Karabiner を reload する。
+sync_karabiner() {
+  local dest_json="$HOME/.config/karabiner/karabiner.json"
+  local before="" after=""
+  [ -f "$dest_json" ] && before="$(shasum "$dest_json" 2>/dev/null | awk '{print $1}')"
+
+  copy_item ".config/karabiner" "$HOME/.config/karabiner"
+
+  [ -f "$dest_json" ] && after="$(shasum "$dest_json" 2>/dev/null | awk '{print $1}')"
+
+  if [ "$before" != "$after" ]; then
+    reload_karabiner
+  else
+    echo "済み:     Karabiner 設定変更なし (reload 不要)"
+  fi
+}
+
 restore_fisher_plugins() {
   echo "--- Fisher ---"
   if command -v fish &>/dev/null; then
@@ -151,9 +184,16 @@ if [ "$MODE" = "fish" ]; then
   exit 0
 fi
 
+if [ "$MODE" = "karabiner" ]; then
+  echo "=== Karabiner 設定同期 ==="
+  sync_karabiner
+  echo "完了しました"
+  exit 0
+fi
+
 if [ "$MODE" != "all" ]; then
   echo "エラー: 未知の MODE です: $MODE"
-  echo "利用可能: all, hermes, gws, python, npm, fish"
+  echo "利用可能: all, hermes, gws, python, npm, fish, karabiner"
   exit 1
 fi
 
@@ -186,6 +226,11 @@ echo ""
 # === 設定ファイルコピー ===
 echo "--- 設定ファイルコピー ---"
 sync_files
+echo ""
+
+# === Karabiner (コピー + 変更時のみ明示 reload) ===
+echo "--- Karabiner ---"
+sync_karabiner
 echo ""
 
 # === Git ローカル設定 ===
