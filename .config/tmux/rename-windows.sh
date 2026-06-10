@@ -30,11 +30,27 @@ while IFS= read -r win_id; do
     # マーカーは window option @manual_name。解除は prefix + M-, (tmux.conf)。
     manual=$(tmux show-options -wqv -t "$win_id" @manual_name 2>/dev/null)
     [[ "$manual" == "1" ]] && continue
+
+    # tmux 標準 automatic-rename を off にしている代償として、手動改名の保護を自前で行う。
+    # automatic-rename は「rename-window 等で手動命名された window を自動命名対象から外す」
+    # native 挙動を持つが、それを失っているため、前回このスクリプトが付けた名前を
+    # @ai_auto_name に記録して再現する。現在の window 名が @ai_auto_name と食い違う場合、
+    # ユーザーが任意の経路 (prefix + , に限らず :rename-window / 端末エスケープ等) で改名した
+    # とみなし、自動 rename しない。@ai_auto_name 未設定の window は未追跡なので新規に adopt する。
+    cur_name=$(tmux display-message -p -t "$win_id" '#{window_name}' 2>/dev/null)
+    auto_name=$(tmux show-options -wqv -t "$win_id" @ai_auto_name 2>/dev/null)
+    [[ -n "$auto_name" && "$cur_name" != "$auto_name" ]] && continue
+
     pane_pid=$(
         tmux list-panes -t "$win_id" -F '#{pane_pid}	#{@ai_sidebar}	#{pane_active}' 2>/dev/null \
             | awk -F '\t' '$2 != "1" && $3 == "1" { print $1; found=1; exit } $2 != "1" && first == "" { first=$1 } END { if (!found && first != "") print first }'
     )
     [[ -z "$pane_pid" ]] && continue
     name=$(detect_name "$pane_pid")
-    tmux rename-window -t "$win_id" "$name" 2>/dev/null || true
+    # 改名が必要なときだけ rename し、成功したら @ai_auto_name を更新する。rename に失敗
+    # したら marker を更新しない (現在名と marker が食い違ったまま誤って保護扱いになるのを防ぐ)。
+    if [[ "$name" != "$cur_name" ]]; then
+        tmux rename-window -t "$win_id" "$name" 2>/dev/null || continue
+    fi
+    tmux set-option -w -t "$win_id" @ai_auto_name "$name" 2>/dev/null || true
 done < <(tmux list-windows -a -F '#{window_id}' 2>/dev/null)
