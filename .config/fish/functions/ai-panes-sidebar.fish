@@ -613,9 +613,8 @@ function __ai_claude_signal_line_state --argument-names line
     # ことがある。recap / status 行の "N shell, M monitor still running" や
     # "N shell, M monitor ·" を解析し、実作業が走っていれば processing として出す。
     #   - background shell (run_in_background Bash 等の実作業) が 1 本でもあれば working。
-    #   - monitor は agmsg 受信監視・sidebar 等の常駐分が常に 1 本走り続けるため、
-    #     2 本以上 (常駐 + α の実 watch) の時だけ working とする。1 本だけなら idle
-    #     (idle 完了後も ▶ に張り付くのを防ぐ)。
+    #   - monitor は sidebar 等の常駐分が走ることがあるため、
+    #     2 本以上の時だけ working とする。1 本だけなら idle。
     set -l is_runline 0
     if string match -qr 'still running' -- "$line"
         set is_runline 1
@@ -909,8 +908,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
     # v34: 重複時も詳細ヘッダは残し、plan/task 側の重複上位目標行だけ省く。
     # v35: 重複時の詳細ヘッダに色付き上位目標行を再利用する。
     # v39: sidebar writer でも Codex pane の base title を復旧する。
-    # v40: agmsg identity は pane border 専用にし、sidebar 表示名からは外す。
-    # v41: agmsg unread summary を sidebar 表示名へ付与する。
+    # v40-41: (agmsg 撤去により削除)
     # v42: 完了通知音を Purr → Submarine に変更 (耳に残りにくいマイルドな音へ)。
     # v43: Claude Code の background monitor 実行中は prompt が戻っていても working と判定。
     # v44: Codex 判定側でも monitor 実行中を working と判定。
@@ -919,7 +917,8 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
     # v47: Claude の background shell が 1 本でもあれば working と判定 (実作業の取りこぼし対策)。
     # v48: Claude の working/idle は capture-pane (active spinner / shell / monitor>=2) を唯一の
     #      源にし、idle 中も animate する title の braille スピナーを working 根拠から外す。
-    set -l state_version 48
+    # v49: agmsg 撤去。list-panes format から @agmsg_unread_summary を除去。
+    set -l state_version 50
     while true
         # ===== Section 1: 初期化 (loop 毎の状態リセット) =====
         set -l lines
@@ -943,7 +942,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
         # tmux list-panes で全 pane の option を 1 回でまとめて取得する (毎 pane に
         # show-option を打つより速い)。format string の field 数を変えたら、下の
         # `string split -m N` (parts 配列の総数 - 1) も合わせて更新すること。
-        set -l raw (tmux list-panes -s -F '#{window_index}.#{pane_index}	#{pane_title}	#{@fixed_title}	#{@ai_base_title}	#{@ai_sidebar}	#{pane_current_path}	#{window_index}	#{@ai_display_index}	#{pane_current_command}	#{pane_id}	#{@ai_state}	#{@ai_state_since}	#{@ai_state_version}	#{pane_active}	#{window_id}	#{@ai_codex_started_at}	#{@ai_codex_session_file}	#{@ai_codex_cwd}	#{@ai_app}	#{@ai_claude_session_id}	#{@ai_claude_cwd}	#{window_name}	#{@ai_title_source}	#{@agmsg_unread_summary}' 2>/dev/null)
+        set -l raw (tmux list-panes -s -F '#{window_index}.#{pane_index}	#{pane_title}	#{@fixed_title}	#{@ai_base_title}	#{@ai_sidebar}	#{pane_current_path}	#{window_index}	#{@ai_display_index}	#{pane_current_command}	#{pane_id}	#{@ai_state}	#{@ai_state_since}	#{@ai_state_version}	#{pane_active}	#{window_id}	#{@ai_codex_started_at}	#{@ai_codex_session_file}	#{@ai_codex_cwd}	#{@ai_app}	#{@ai_claude_session_id}	#{@ai_claude_cwd}	#{window_name}	#{@ai_title_source}' 2>/dev/null)
         # 自分自身の @ai_sidebar を見て writer 判定する。
         # 旧: session 内最初の writer だけ writer 認定 → 2 つ目以降の sidebar pane
         # (window 2, 3, ... の writer) が is_writer=0 のまま動き、state_version self-check
@@ -960,7 +959,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
         #   - sidebar と同じ window で active な Codex/Claude pane を active_* 変数に記録
         set -l entries
         for line in $raw
-            set -l parts (string split -m 23 \t -- $line)
+            set -l parts (string split -m 22 \t -- $line)
             set -l loc $parts[1]
             set -l title $parts[2]
             set -l fixed_title $parts[3]
@@ -983,7 +982,6 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             set -l claude_cwd $parts[21]
             set -l window_name $parts[22]
             set -l title_source $parts[23]
-            set -l agmsg_unread_summary $parts[24]
             set -l codex_session_id (__ai_codex_session_id_from_title "$title")
 
             test "$loc" = (tmux display-message -p -t "$TMUX_PANE" '#{window_index}.#{pane_index}' 2>/dev/null); and continue
@@ -1104,7 +1102,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
                 set detected_state working
             else if test "$claude_working" = 1
                 set detected_state working
-            else if string match -q '✳*' -- $title
+            else if string match -q '✳*' -- $title; and test "$is_claude_console" != 1
                 set detected_state waiting
             else if string match -qr '^[⠀-⣿]' -- $title; and test "$is_claude_console" != 1
                 # title の braille スピナーは Claude では idle 中も background monitor で

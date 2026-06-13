@@ -6,22 +6,22 @@ function ai-panes --description 'Jump to an AI CLI pane in the current tmux sess
 
     set -l session (tmux display-message -p '#S')
 
-    # 各 pane を tab 区切り 7 フィールドで取得。pane_title には "|" が入ることがある。
+    # 各 pane を tab 区切り 9 フィールドで取得。pane_title には "|" が入ることがある。
     # pane_title: Claude Code が送る OSC 2 の状態 marker 判定に使う。
     # fixed_title: 手動固定タイトル。設定されていれば表示名として最優先する。
     # ai_base_title: AI CLI の自動生成セッション名など、手動固定ではない表示名。
     # pane_current_command: window 全体ではなく pane 固有の codex / claude 判定に使う。
-    set -l raw (tmux list-panes -s -F '#{window_index}.#{pane_index}	#{pane_title}	#{@fixed_title}	#{@ai_base_title}	#{@ai_sidebar}	#{pane_current_path}	#{pane_current_command}')
+    # @ai_app / @ai_state: sidebar が判定済みの app 種別と状態。Claude pane はこちらで分類。
+    set -l raw (tmux list-panes -s -F '#{window_index}.#{pane_index}	#{pane_title}	#{@fixed_title}	#{@ai_base_title}	#{@ai_sidebar}	#{pane_current_path}	#{pane_current_command}	#{@ai_app}	#{@ai_state}')
 
     # 状態判定して 3 バケツに振り分け:
-    #   ✳ 始まり                      = Claude が user 入力待ち (最優先)
-    #   Braille (U+2800-U+28FF) 始まり = Claude が生成中
-    #   上記以外                       = Codex / Claude / シェル
+    #   Claude pane (@ai_app=claude) は sidebar 算出の @ai_state で分類
+    #   非 Claude: ✳ 始まり = 入力待ち、Braille 始まり = 生成中、その他 = idle
     set -l waiting
     set -l working
     set -l idle
     for line in $raw
-        set -l parts (string split -m 6 \t -- $line)
+        set -l parts (string split -m 8 \t -- $line)
         set -l loc $parts[1]
         set -l title $parts[2]
         set -l fixed_title $parts[3]
@@ -29,15 +29,25 @@ function ai-panes --description 'Jump to an AI CLI pane in the current tmux sess
         set -l is_sidebar $parts[5]
         set -l path $parts[6]
         set -l command_name (string lower -- $parts[7])
+        set -l ai_app $parts[8]
+        set -l ai_state $parts[9]
 
         test "$is_sidebar" = 1; and continue
 
         set -l display
         set -l is_codex_console 0
-        if string match -q '*codex*' -- $command_name
+        if test "$ai_app" = codex
+            set is_codex_console 1
+        else if string match -q '*codex*' -- $command_name
             set is_codex_console 1
         else if string match -q '*Context *% used*' -- $title
             set is_codex_console 1
+        end
+        set -l is_claude_console 0
+        if test "$ai_app" = claude
+            set is_claude_console 1
+        else if string match -q '*claude*' -- $command_name
+            set is_claude_console 1
         end
 
         if test -n "$fixed_title"
@@ -50,14 +60,21 @@ function ai-panes --description 'Jump to an AI CLI pane in the current tmux sess
             set display $title
         end
 
-        if string match -q '✳*' -- $title
+        if test "$is_claude_console" = 1
+            switch "$ai_state"
+                case waiting
+                    set -a waiting "$loc  ● 待ち    │  $display"
+                case working
+                    set -a working "$loc  ◐ 動作中  │  $display"
+                case '*'
+                    set -a idle "$loc  ○ Claude  │  $display"
+            end
+        else if string match -q '✳*' -- $title
             set -a waiting "$loc  ● 待ち    │  $display"
         else if string match -qr '^[⠀-⣿]' -- $title
             set -a working "$loc  ◐ 動作中  │  $display"
         else if test "$is_codex_console" = 1
             set -a idle "$loc  ○ Codex   │  $display"
-        else if string match -q '*claude*' -- $command_name
-            set -a idle "$loc  ○ Claude  │  $display"
         else
             set -a idle "$loc  ○ シェル  │  $display"
         end
