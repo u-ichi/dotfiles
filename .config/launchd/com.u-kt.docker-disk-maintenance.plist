@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.u-kt.docker-disk-maintenance</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>@@HOME@@/.local/bin/docker-disk-maintenance</string>
+    <string>--force</string>
+  </array>
+
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>10</integer>
+    <key>Minute</key>
+    <integer>20</integer>
+  </dict>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>DOTFILES_DOCKER_PRUNE_THRESHOLD_GIB</key>
+    <string>60</string>
+    <key>DOTFILES_DOCKER_MIN_FREE_GIB</key>
+    <string>30</string>
+    <key>DOTFILES_DOCKER_PRUNE_UNTIL</key>
+    <string>168h</string>
+    <key>DOTFILES_DOCKER_CACHE_UNTIL</key>
+    <string>168h</string>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>@@HOME@@/Library/Logs/dotfiles/docker-disk-maintenance.launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>@@HOME@@/Library/Logs/dotfiles/docker-disk-maintenance.launchd.err.log</string>
+</dict>
+</plist>

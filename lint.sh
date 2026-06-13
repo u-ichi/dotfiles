@@ -101,6 +101,15 @@ while IFS= read -r f; do
 done <<< "$(git_files_by_ext json)"
 echo ""
 
+# === plist ===
+echo "=== plist ==="
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  echo "  $f"
+  plutil -lint "$SCRIPT_DIR/$f" >/dev/null || errors=$((errors + 1))
+done <<< "$(git_files_by_ext plist)"
+echo ""
+
 if [ "$errors" -gt 0 ]; then
   echo "エラー: $errors 件の問題が見つかりました"
   exit 1

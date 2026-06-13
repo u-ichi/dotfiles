@@ -11,10 +11,11 @@
 ├── lint.sh                     # ShellCheck / fish / taplo / json チェック
 ├── copy.conf                   # コピー定義 (ソース → コピー先の宣言)
 ├── scripts/
-│   └── check-tmux-safety.sh    #   default tmux server を落とす unsafe command の検出
+│   ├── check-tmux-safety.sh    #   default tmux server を落とす unsafe command の検出
+│   └── docker-disk-maintenance.sh # Docker Desktop の容量監視と安全側 prune
 ├── lib/
 │   ├── copy.sh                 #   設定ファイルコピー関数 (copy.conf を読み込む)
-│   ├── docker.sh               #   Docker Desktop 自動起動の有効化
+│   ├── docker.sh               #   Docker Desktop 自動起動とディスク保守 LaunchAgent の適用
 │   ├── defaults.sh             #   macOS defaults の適用
 │   ├── aws.sh                  #   AWS config を config.d パターンで組み立て
 │   ├── hermes.sh               #   Hermes Agent (x_search) の明示導入補助
@@ -43,6 +44,7 @@
 │   ├── tmux/test-ai-sidebars-isolated.sh # 専用 socket 上の tmux AI sidebar 検証
 │   ├── ghostty/config          # Ghostty ターミナル設定
 │   ├── glow/glow.yml           # Glow (markdown viewer) 設定
+│   ├── launchd/                # ユーザー LaunchAgent plist テンプレート
 │   └── karabiner/              # Karabiner-Elements キーリマップ
 ├── hooks/
 │   └── pre-commit              # Git pre-commit フック (lint.sh 実行)
@@ -71,7 +73,8 @@ dotfiles 側では扱わない。詳細は claude.codex の `install.sh` と `do
 
 | スクリプト | 役割 |
 |-----------|------|
-| `install.sh` | 初回セットアップと日常更新の単一エントリポイント。Brewfile 適用 / 更新、Hermes Agent 導入、設定ファイルコピー、Git ローカル設定の対話的入力、AWS 設定の再展開、Claude Code / mkcert / Fisher / Terraform / npm / Python tools の同期、macOS defaults 適用を行う。第 1 引数で MODE (`hermes` / `gws` / `python` / `npm` / `fish`) を指定するとそのモジュールだけ再実行する |
+| `install.sh` | 初回セットアップと日常更新の単一エントリポイント。Brewfile 適用 / 更新、Hermes Agent 導入、設定ファイルコピー、Git ローカル設定の対話的入力、AWS 設定の再展開、Claude Code / mkcert / Fisher / Terraform / npm / Python tools の同期、macOS defaults 適用を行う。第 1 引数で MODE (`hermes` / `gws` / `python` / `npm` / `fish` / `docker`) を指定するとそのモジュールだけ再実行する |
+| `scripts/docker-disk-maintenance.sh` | Docker Desktop の `Docker.raw` とホスト空き容量を確認し、古い build cache と未使用 image / stopped container / unused network を削除する。volume は削除しない |
 | `lint.sh` | ShellCheck (Bash) / `fish --no-execute` / tmux isolated smoke test / taplo (TOML) / `python3 -m json.tool` (JSON) を実行。GitHub Actions でも同等の静的チェックが走る |
 | `.config/tmux/rename-windows.sh` | tmux window 名を active な通常 pane のプロセス名から更新する。AI sidebar pane が active の場合は最初の通常 pane を基準にする |
 | `.config/tmux/ensure-ai-sidebars.sh` | 各 tmux window に AI pane 一覧 sidebar が無ければ作成する。既存 sidebar の kill / resize は行わない |
@@ -113,6 +116,7 @@ MODE を追加・変更する場合、認証情報や手動ログインなど re
 | `python` | `ensure_python_tools` (uv venv + Pythonfile) |
 | `npm` | `update_npm_globals` (Npmfile) |
 | `fish` | Fish 設定ファイルをコピーし、Fisher を導入または `fisher update` で `fish_plugins` を復元 |
+| `docker` | Docker Desktop AutoStart を有効化し、`docker-disk-maintenance` と LaunchAgent を同期 |
 
 各モジュールは個別失敗が他に波及しないよう、`lib/<name>.sh` 内で必要なツールの有無
 (`command -v`) を先頭で確認する。`Brewfile` には依存ツール (uv / googleworkspace-cli /

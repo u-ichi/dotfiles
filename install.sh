@@ -191,9 +191,17 @@ if [ "$MODE" = "karabiner" ]; then
   exit 0
 fi
 
+if [ "$MODE" = "docker" ]; then
+  echo "=== Docker 設定同期 ==="
+  ensure_docker_autostart
+  install_docker_disk_maintenance
+  echo "完了しました"
+  exit 0
+fi
+
 if [ "$MODE" != "all" ]; then
   echo "エラー: 未知の MODE です: $MODE"
-  echo "利用可能: all, hermes, gws, python, npm, fish, karabiner"
+  echo "利用可能: all, hermes, gws, python, npm, fish, karabiner, docker"
   exit 1
 fi
 
@@ -307,6 +315,7 @@ echo ""
 # === アプリケーション設定 ===
 echo "--- アプリケーション設定 ---"
 ensure_docker_autostart
+install_docker_disk_maintenance
 echo ""
 
 echo "完了しました"
