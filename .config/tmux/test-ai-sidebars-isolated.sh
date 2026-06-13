@@ -123,6 +123,20 @@ for key in c h v '"' %; do
   fi
 done
 
+new_window_binding="$(tmux_i list-keys -T prefix c 2>/dev/null || true)"
+for expected_fragment in \
+  'split-window -h -c "#{pane_current_path}" -p 45' \
+  'split-window -v -c "#{pane_current_path}" -p 66' \
+  'split-window -v -c "#{pane_current_path}" -p 50' \
+  'select-pane -L'
+do
+  if ! printf '%s\n' "$new_window_binding" | grep -q -- "$expected_fragment"; then
+    echo "ERROR: prefix+c does not create the expected 4-pane work layout" >&2
+    printf '%s\n' "$new_window_binding" >&2
+    exit 1
+  fi
+done
+
 client_hook="$(tmux_i show-hooks -g client-attached)"
 if ! printf '%s\n' "$client_hook" | grep -q 'ensure-ai-sidebars.sh'; then
   echo "ERROR: client-attached hook does not create sidebars" >&2
