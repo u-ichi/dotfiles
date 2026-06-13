@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.u-kt.dotfiles-daily-maintenance</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>@@HOME@@/.local/bin/dotfiles-daily-maintenance</string>
+    <string>--repo-root</string>
+    <string>@@DOTFILES_DIR@@</string>
+    <string>--env-file</string>
+    <string>@@HOME@@/.config/dotfiles-maintenance/env</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>@@DOTFILES_DIR@@</string>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>6</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>@@HOME@@/Library/Logs/dotfiles/daily-maintenance.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>@@HOME@@/Library/Logs/dotfiles/daily-maintenance.err.log</string>
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>

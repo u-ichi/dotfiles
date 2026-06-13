@@ -19,12 +19,22 @@ cd dotfiles
 3. Git のユーザー情報を対話的に設定（`~/.config/git/config.local`）
 4. Claude Code / mkcert / Fisher を必要に応じてインストール
 5. macOS defaults を適用
+6. 日次メンテナンス LaunchAgent を登録
 
 Fish 設定と Fisher プラグインだけを復元する場合:
 
 ```bash
 ./install.sh fish
 ```
+
+日次メンテナンスだけを同期し直す場合:
+
+```bash
+./install.sh maintenance
+```
+
+Slack 投稿を有効にするには `~/.config/dotfiles-maintenance/env` に Bot token と channel ID を設定する。
+`install.sh maintenance` は env file が無い場合にテンプレートを作る。
 
 ## 内部構成
 

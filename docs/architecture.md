@@ -12,6 +12,8 @@
 ├── copy.conf                   # コピー定義 (ソース → コピー先の宣言)
 ├── scripts/
 │   ├── check-tmux-safety.sh    #   default tmux server を落とす unsafe command の検出
+│   ├── cleanup-local-disk.sh   #   再生成可能なローカル開発データの整理
+│   ├── daily-maintenance.sh    #   install.sh + cleanup + Slack 要約の日次実行
 │   └── docker-disk-maintenance.sh # Docker Desktop の容量監視と安全側 prune
 ├── lib/
 │   ├── copy.sh                 #   設定ファイルコピー関数 (copy.conf を読み込む)
@@ -20,7 +22,8 @@
 │   ├── aws.sh                  #   AWS config を config.d パターンで組み立て
 │   ├── hermes.sh               #   Hermes Agent (x_search) の明示導入補助
 │   ├── gws.sh                  #   Google Workspace CLI (gws) の明示導入・更新補助
-│   └── python.sh               #   uv ベースの Python automation tools (Pythonfile) 同期
+│   ├── python.sh               #   uv ベースの Python automation tools (Pythonfile) 同期
+│   └── maintenance.sh          #   日次メンテナンス LaunchAgent の同期
 ├── Brewfile                    # Homebrew パッケージ・cask 定義
 ├── Npmfile                     # npm グローバルパッケージ定義
 ├── Pythonfile                  # uv 経由で導入する Python パッケージ定義 (python-pptx 等)
@@ -73,8 +76,10 @@ dotfiles 側では扱わない。詳細は claude.codex の `install.sh` と `do
 
 | スクリプト | 役割 |
 |-----------|------|
-| `install.sh` | 初回セットアップと日常更新の単一エントリポイント。Brewfile 適用 / 更新、Hermes Agent 導入、設定ファイルコピー、Git ローカル設定の対話的入力、AWS 設定の再展開、Claude Code / mkcert / Fisher / Terraform / npm / Python tools の同期、macOS defaults 適用を行う。第 1 引数で MODE (`hermes` / `gws` / `python` / `npm` / `fish` / `docker`) を指定するとそのモジュールだけ再実行する |
+| `install.sh` | 初回セットアップと日常更新の単一エントリポイント。Brewfile 適用 / 更新、Hermes Agent 導入、設定ファイルコピー、Git ローカル設定の対話的入力、AWS 設定の再展開、Claude Code / mkcert / Fisher / Terraform / npm / Python tools の同期、macOS defaults 適用、日次メンテナンス LaunchAgent 登録を行う。第 1 引数で MODE (`hermes` / `gws` / `python` / `npm` / `fish` / `docker` / `maintenance`) を指定するとそのモジュールだけ再実行する |
 | `scripts/docker-disk-maintenance.sh` | Docker Desktop の `Docker.raw` とホスト空き容量を確認し、古い build cache と未使用 image / stopped container / unused network を削除する。volume は削除しない |
+| `scripts/cleanup-local-disk.sh` | Codex Crashpad dump、crude-morning-report の SQLite backup、aws-cliniconnect-terraform の `.terraform` cache、Homebrew cache を整理する。既定は dry-run、日次メンテナンスでは `--apply` で実行する |
+| `scripts/daily-maintenance.sh` | dotfiles worktree が clean の場合に `git pull --ff-only` と `./install.sh` を実行し、その後 `cleanup-local-disk.sh --apply`、Codex 要約、Slack 投稿を行う |
 | `lint.sh` | ShellCheck (Bash) / `fish --no-execute` / tmux isolated smoke test / taplo (TOML) / `python3 -m json.tool` (JSON) を実行。GitHub Actions でも同等の静的チェックが走る |
 | `.config/tmux/rename-windows.sh` | tmux window 名を active な通常 pane のプロセス名から更新する。AI sidebar pane が active の場合は最初の通常 pane を基準にする |
 | `.config/tmux/ensure-ai-sidebars.sh` | 各 tmux window に AI pane 一覧 sidebar が無ければ作成する。既存 sidebar の kill / resize は行わない |
@@ -117,6 +122,7 @@ MODE を追加・変更する場合、認証情報や手動ログインなど re
 | `npm` | `update_npm_globals` (Npmfile) |
 | `fish` | Fish 設定ファイルをコピーし、Fisher を導入または `fisher update` で `fish_plugins` を復元 |
 | `docker` | Docker Desktop AutoStart を有効化し、`docker-disk-maintenance` と LaunchAgent を同期 |
+| `maintenance` | `dotfiles-daily-maintenance` / `dotfiles-cleanup-local-disk` の配置、`~/.config/dotfiles-maintenance/env` テンプレート作成、日次 LaunchAgent 登録 |
 
 各モジュールは個別失敗が他に波及しないよう、`lib/<name>.sh` 内で必要なツールの有無
 (`command -v`) を先頭で確認する。`Brewfile` には依存ツール (uv / googleworkspace-cli /

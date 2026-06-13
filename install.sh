@@ -13,6 +13,7 @@ source "$SCRIPT_DIR/lib/terraform.sh"
 source "$SCRIPT_DIR/lib/hermes.sh"
 source "$SCRIPT_DIR/lib/gws.sh"
 source "$SCRIPT_DIR/lib/python.sh"
+source "$SCRIPT_DIR/lib/maintenance.sh"
 
 MODE="${1:-all}"
 
@@ -199,9 +200,16 @@ if [ "$MODE" = "docker" ]; then
   exit 0
 fi
 
+if [ "$MODE" = "maintenance" ]; then
+  echo "=== 日次メンテナンス設定同期 ==="
+  install_dotfiles_daily_maintenance
+  echo "完了しました"
+  exit 0
+fi
+
 if [ "$MODE" != "all" ]; then
   echo "エラー: 未知の MODE です: $MODE"
-  echo "利用可能: all, hermes, gws, python, npm, fish, karabiner, docker"
+  echo "利用可能: all, hermes, gws, python, npm, fish, karabiner, docker, maintenance"
   exit 1
 fi
 
@@ -316,6 +324,11 @@ echo ""
 echo "--- アプリケーション設定 ---"
 ensure_docker_autostart
 install_docker_disk_maintenance
+echo ""
+
+# === 日次メンテナンス ===
+echo "--- 日次メンテナンス ---"
+install_dotfiles_daily_maintenance
 echo ""
 
 echo "完了しました"
