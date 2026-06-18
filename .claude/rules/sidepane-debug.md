@@ -184,8 +184,11 @@ working/idle は footer/recap 行 (`capture-pane`) を唯一の源にする:
   `Brewed for 23m 14s · …` は括弧が無いので区別できる。
 - **background shell**: `N shell … still running` / `· N shell …·` が 1 本でも
   あれば working (run_in_background Bash 等の実作業)。
-- **monitor**: agmsg 受信監視・sidebar 等の常駐分が**常に 1 本**走り続けるため、
+- **monitor**: sidebar 等の常駐分が走ることがあるため、
   `N monitor` が **2 本以上のときだけ** working。1 本だけなら idle。
+- **sub-agent (Agent tool)**: footer の agent 進捗行
+  `◯ <name> ... Nm Ns · ↓ Nk tokens` が 1 本でもあれば working。
+  active turn の括弧付き elapsed が消えた後も agent が動き続ける状態を捕捉する。
 
 caller の title-braille fallback (`^[⠀-⣿]` → working) は **Claude console では無効**
 (`is_claude_console != 1` で gate)。Codex 等は従来どおり title で補う。
@@ -197,6 +200,9 @@ caller の title-braille fallback (`^[⠀-⣿]` → working) は **Claude consol
   抱えていないか、罠 4) を疑う。
 - 「shell が動いてるのに ■」→ footer に `N shell still running` が出ているか確認。
   shell 検出漏れ。
+- 「sub-agent が動いてるのに ■」→ capture-pane 末尾に `◯ ... · ↓` 行があるか確認。
+  なければ pane height が小さく footer がスクロールアウトした可能性。
+  あるのに ■ なら writer が旧版 (v51 以前) を抱えていないか確認 (罠 4)。
 
 ## 関連
 

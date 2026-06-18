@@ -178,13 +178,31 @@ if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; test
   exit 1
 fi
 
-if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; test (printf '%s\n' 'Conversation interrupted - tell the model what to do differently' '• Working (10s • esc to interrupt)' | __ai_codex_visible_state) = working; and test (printf '%s\n' '• Working (10s • esc to interrupt)' '› 対処して' | __ai_codex_visible_state) = working; and test (printf '%s\n' '• Booting MCP server: codex_apps (5m 12s • esc to interrupt)' | __ai_codex_visible_state) = working; and test (printf '%s\n' 'agent [main] | ctx:65% | 1 monitor · ← for agents' '› 対処して' | __ai_codex_visible_state) = working; and test (printf '%s\n' '• Working (10s • esc to interrupt)' '• Worked for 1m 42s' '› 対処して' | __ai_codex_visible_state) = idle; and test (printf '%s\n' 'Would you like to run the following command?' 'Yes, proceed (y)' | __ai_codex_visible_state) = waiting"; then
+if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; test (printf '%s\n' 'Conversation interrupted - tell the model what to do differently' '• Working (10s • esc to interrupt)' | __ai_codex_visible_state) = working; and test (printf '%s\n' '• Working (10s • esc to interrupt)' '› 対処して' | __ai_codex_visible_state) = working; and test (printf '%s\n' '• Booting MCP server: codex_apps (5m 12s • esc to interrupt)' | __ai_codex_visible_state) = working; and test (printf '%s\n' 'agent [main] | ctx:65% | 1 monitor · ← for agents' '› 対処して' | __ai_codex_visible_state) = working; and test (printf '%s\n' '• Working (10s • esc to interrupt)' '• Worked for 1m 42s' '› 対処して' | __ai_codex_visible_state) = idle; and test (printf '%s\n' 'Would you like to run the following command?' 'Yes, proceed (y)' | __ai_codex_visible_state) = blocked"; then
   echo "ERROR: Codex visible state detection is invalid" >&2
   exit 1
 fi
 
-if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; test (printf '%s\n' '✻ Baked for 28m 36s · 1 monitor still running' '❯ ' | __ai_claude_visible_state) = working; and test (printf '%s\n' 'agent [main] | ctx:65% | 1 monitor · ← for agents' '❯ ' | __ai_claude_visible_state) = working; and test (printf '%s\n' 'Do you want to proceed?' '❯ 1. Yes' | __ai_claude_visible_state) = waiting"; then
+if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; test -z (printf '%s\n' '✻ Baked for 28m 36s · 1 monitor still running' '❯ ' | __ai_claude_visible_state); and test -z (printf '%s\n' 'agent [main] | ctx:65% | 1 monitor · ← for agents' '❯ ' | __ai_claude_visible_state); and test (printf '%s\n' 'Do you want to proceed?' '❯ 1. Yes' | __ai_claude_visible_state) = blocked"; then
   echo "ERROR: Claude visible state detection is invalid" >&2
+  exit 1
+fi
+
+# Claude sub-agent (Agent tool) waiting: ◯ progress lines → working
+if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; test (printf '%s\n' '✻ Crunched for 1m 30s' '  ⏺ main' '  ◯ Explore  Reading...  1m 43s · ↓ 61.8k tokens' | __ai_claude_visible_state) = working; and test (printf '%s\n' '  ◯ short-task  Analyzing...  45s · ↓ 12.3k tokens' | __ai_claude_visible_state) = working"; then
+  echo "ERROR: Claude sub-agent progress line should be detected as working" >&2
+  exit 1
+fi
+
+# ◯ without elapsed/↓ should NOT trigger working
+if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; test -z (printf '%s\n' '◯ just a circle character' '❯ ' | __ai_claude_visible_state)"; then
+  echo "ERROR: Claude ◯ without elapsed/↓ should not trigger working" >&2
+  exit 1
+fi
+
+# Codex background terminal running with prompt should be idle (not false positive)
+if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; test (printf '%s\n' '1 background terminal running · /ps to view · /stop to close' '› 対処して' | __ai_codex_visible_state) = idle"; then
+  echo "ERROR: Codex background terminal running with prompt should not be working" >&2
   exit 1
 fi
 
@@ -198,7 +216,7 @@ if fish -c "source '$SCRIPT_DIR/../fish/functions/__ai_pane_title_sync.fish'; fu
   exit 1
 fi
 
-if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; test (__ai_notify_detail waiting codex repo 'Would you like to run the following command?' 'Yes, proceed (y)') = 'コマンド実行の承認待ち · repo'; and test (__ai_notify_detail idle codex repo '• Worked for 1m 42s' '› 対処して') = '処理完了 (Worked for 1m 42s) · repo'; and test (__ai_notify_detail waiting claude repo 'Do you want to proceed?' '❯ 1. Yes') = 'Do you want to proceed? · repo'"; then
+if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; test (__ai_notify_detail blocked codex repo 'Would you like to run the following command?' 'Yes, proceed (y)') = 'コマンド実行の承認待ち · repo'; and test (__ai_notify_detail idle codex repo '• Worked for 1m 42s' '› 対処して') = '処理完了 (Worked for 1m 42s) · repo'; and test (__ai_notify_detail blocked claude repo 'Do you want to proceed?' '❯ 1. Yes') = 'Do you want to proceed? · repo'"; then
   echo "ERROR: AI notification detail extraction is invalid" >&2
   exit 1
 fi
@@ -212,6 +230,7 @@ if command -v jq >/dev/null 2>&1; then
   codex_sessions_dir="$TEST_HOME/.codex/sessions/2026/05/30"
   codex_session_a="$codex_sessions_dir/rollout-2026-05-30T12-00-00-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.jsonl"
   codex_session_b="$codex_sessions_dir/rollout-2026-05-30T12-09-31-bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb.jsonl"
+  codex_session_c="$codex_sessions_dir/rollout-2026-05-30T12-00-02-cccccccc-cccc-cccc-cccc-cccccccccccc.jsonl"
   mkdir -p "$codex_sessions_dir"
   printf '%s\n' "{\"type\":\"session_meta\",\"payload\":{\"id\":\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\",\"cwd\":\"$TEST_HOME\"}}" > "$codex_session_a"
   printf '%s\n' "{\"type\":\"session_meta\",\"payload\":{\"id\":\"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb\",\"cwd\":\"$TEST_HOME\"}}" > "$codex_session_b"
@@ -219,10 +238,22 @@ if command -v jq >/dev/null 2>&1; then
     echo "ERROR: Codex sidebar session file resolution allows cross-pane collision" >&2
     exit 1
   fi
+  printf '%s\n' "{\"type\":\"session_meta\",\"payload\":{\"id\":\"cccccccc-cccc-cccc-cccc-cccccccccccc\",\"cwd\":\"$TEST_HOME\"}}" > "$codex_session_c"
+  if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; set a_start (__ai_codex_session_start_epoch '$codex_session_a'); test -z (__ai_codex_find_session_file '$TEST_HOME' \$a_start)"; then
+    echo "ERROR: Codex sidebar session file resolution should reject ambiguous near-start sessions" >&2
+    exit 1
+  fi
+  rm -f "$codex_session_c"
   if ! fish -c "source '$SCRIPT_DIR/../fish/functions/__ai_pane_title_sync.fish'; set a_start (__ai_pane_title_sync_codex_session_start_epoch '$codex_session_a'); set by_id (__ai_pane_title_sync_codex_session_file_by_id bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb); set by_time (__ai_pane_title_sync_codex_find_session_file '$TEST_HOME' \$a_start); test (__ai_pane_title_sync_codex_session_id_from_title 'agent | bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb | Context 1% used') = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'; and test (basename \"\$by_id\") = 'rollout-2026-05-30T12-09-31-bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb.jsonl'; and test (basename \"\$by_time\") = 'rollout-2026-05-30T12-00-00-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.jsonl'"; then
     echo "ERROR: Codex pane title session file resolution allows cross-pane collision" >&2
     exit 1
   fi
+  printf '%s\n' "{\"type\":\"session_meta\",\"payload\":{\"id\":\"cccccccc-cccc-cccc-cccc-cccccccccccc\",\"cwd\":\"$TEST_HOME\"}}" > "$codex_session_c"
+  if ! fish -c "source '$SCRIPT_DIR/../fish/functions/__ai_pane_title_sync.fish'; set a_start (__ai_pane_title_sync_codex_session_start_epoch '$codex_session_a'); test -z (__ai_pane_title_sync_codex_find_session_file '$TEST_HOME' \$a_start)"; then
+    echo "ERROR: Codex pane title session file resolution should reject ambiguous near-start sessions" >&2
+    exit 1
+  fi
+  rm -f "$codex_session_c"
   if command -v sqlite3 >/dev/null 2>&1; then
     goal_home="$SOCKET_DIR/goal-title-home"
     mkdir -p "$goal_home/.codex"
@@ -375,7 +406,38 @@ CLAUDE_JSONL2
 fi
 
 sidebar_pane="$(tmux_i list-panes -t 'ai-sidebar-test:1' -F '#{pane_id}	#{@ai_sidebar}' | awk -F '\t' '$2 == "1" { print $1; exit }')"
-tmux_i set-option -p -t "$normal_pane" @agmsg_display_identity worker1
+tmux_i set-option -p -t "$normal_pane" @tmux_bridge_name worker1
+tmux_i set-option -p -t "$normal_pane" @tmux_bridge_role reviewer
+tmux_i set-option -p -t "$normal_pane" @tmux_bridge_task "active bridge task"
+tmux_i set-option -p -t "$normal_pane" @fixed_title "stale fixed title"
+tmux_i set-option -p -t "$normal_pane" @ai_base_title "plain sidebar title"
+sidebar_output=""
+bridge_task_seen=0
+for _ in {1..30}; do
+  sidebar_output="$(tmux_i capture-pane -p -t "$sidebar_pane")"
+  if printf '%s\n' "$sidebar_output" | grep -Fq "active bridge task"; then
+    bridge_task_seen=1
+    break
+  fi
+  sleep 0.1
+done
+if [ "$bridge_task_seen" -ne 1 ]; then
+  echo "ERROR: sidebar did not prefer tmux-bridge task over fixed title" >&2
+  printf '%s\n' "$sidebar_output" >&2
+  exit 1
+fi
+if printf '%s\n' "$sidebar_output" | grep -Fq "stale fixed title"; then
+  echo "ERROR: sidebar should hide fixed title while tmux-bridge task is active" >&2
+  printf '%s\n' "$sidebar_output" >&2
+  exit 1
+fi
+
+tmux_i set-option -p -t "$normal_pane" @tmux_bridge_task ""
+tmux_i set-option -p -t "$normal_pane" @tmux_bridge_role ""
+tmux_i set-option -p -t "$normal_pane" @fixed_title ""
+tmux_i set-option -p -t "$normal_pane" @ai_app ""
+tmux_i set-option -p -t "$normal_pane" @ai_codex_session_file ""
+tmux_i set-option -p -t "$normal_pane" @ai_title_source ""
 tmux_i set-option -p -t "$normal_pane" @ai_base_title "plain sidebar title"
 sidebar_output=""
 sidebar_title_seen=0
@@ -393,7 +455,7 @@ if [ "$sidebar_title_seen" -ne 1 ]; then
   exit 1
 fi
 if printf '%s\n' "$sidebar_output" | grep -Fq "worker1"; then
-  echo "ERROR: sidebar should not prefix agmsg identity in pane display" >&2
+  echo "ERROR: sidebar should not prefix tmux-bridge name in pane display" >&2
   printf '%s\n' "$sidebar_output" >&2
   exit 1
 fi

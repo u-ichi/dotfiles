@@ -48,6 +48,7 @@ function __ai_codex_find_session_file --argument-names cwd started_at
 
     set -l best_file
     set -l best_delta 999999999
+    set -l candidate_count 0
     for file in (command find "$sessions_dir" -type f -name 'rollout-*.jsonl' -mtime -3 2>/dev/null)
         set -l session_cwd (command head -n 1 "$file" | command jq -r 'select(.type == "session_meta") | .payload.cwd // empty' 2>/dev/null)
         test "$session_cwd" = "$cwd"; or continue
@@ -55,13 +56,16 @@ function __ai_codex_find_session_file --argument-names cwd started_at
         set -l session_started (__ai_codex_session_start_epoch "$file")
         string match -qr '^[0-9]+$' -- "$session_started"; or continue
         set -l delta (math "$session_started - $started_at")
-        if test "$delta" -ge -5; and test "$delta" -le 30; and test "$delta" -lt "$best_delta"
-            set best_delta "$delta"
-            set best_file "$file"
+        if test "$delta" -ge -5; and test "$delta" -le 30
+            set candidate_count (math "$candidate_count + 1")
+            if test "$delta" -lt "$best_delta"
+                set best_delta "$delta"
+                set best_file "$file"
+            end
         end
     end
 
-    test -n "$best_file"; and printf '%s\n' "$best_file"
+    test "$candidate_count" -eq 1; and test -n "$best_file"; and printf '%s\n' "$best_file"
 end
 
 function __ai_codex_plan_lines --argument-names session_file max_line_chars max_display_lines
@@ -552,16 +556,14 @@ function __ai_codex_signal_line_state --argument-names line
         printf '%s\n' working
     else if string match -q '*Waiting for background terminal*' -- "$line"
         printf '%s\n' working
-    else if string match -q '*background terminal running*' -- "$line"
-        printf '%s\n' working
     else if string match -qr '([0-9]+ monitor(s)? still running|[·|] [0-9]+ monitor(s)? [·|])' -- "$line"
         printf '%s\n' working
     else if string match -q '*Press enter to confirm or esc to cancel*' -- "$line"
-        printf '%s\n' waiting
+        printf '%s\n' blocked
     else if string match -q '*Would you like to run the following command?*' -- "$line"
-        printf '%s\n' waiting
+        printf '%s\n' blocked
     else if string match -qr '(Yes, proceed \(y\)|No, and tell Codex what to do differently)' -- "$line"
-        printf '%s\n' waiting
+        printf '%s\n' blocked
     else if string match -q '*Conversation interrupted - tell the model what to do differently*' -- "$line"
         printf '%s\n' waiting
     else if string match -q '*To continue this session, run codex resume*' -- "$line"
@@ -634,6 +636,14 @@ function __ai_claude_signal_line_state --argument-names line
         end
     end
 
+    # sub-agent (Agent tool) 実行中、footer に agent 進捗行が表示される:
+    #   ◯ explore-judge-prompt  Examining...    2m 41s · ↓ 63.8k tokens
+    # ◯ (U+25EF) + elapsed + · ↓ の組み合わせは agent 進捗 UI 固有。
+    if string match -qr '◯.*[0-9]+[hms]( [0-9]+[ms])? · ↓' -- "$line"
+        printf '%s\n' working
+        return 0
+    end
+
     # AskUserQuestion (Submit プロンプト) の footer。
     # `Enter to select · ↑/↓ to navigate · Esc to cancel` が同行に並ぶのは
     # この prompt の固有 footer なので、応答待ちのシグナルとして拾う。
@@ -677,7 +687,7 @@ function __ai_claude_visible_state
         # 出た状態は選択肢を伴わないので誤検知しない)。
         if string match -qr '^\s*❯\s+[0-9]+\.\s+' -- "$line"
             if test "$prompt_question_line_no" -gt 0; and test (math $line_no - $prompt_question_line_no) -le 5
-                set detected_state waiting
+                set detected_state blocked
             end
         end
     end
@@ -701,7 +711,7 @@ function __ai_codex_notify_detail --argument-names state
         set -l clean (__ai_notify_clean_detail "$line")
         test -n "$clean"; or continue
 
-        if test "$state" = waiting
+        if test "$state" = blocked -o "$state" = waiting
             if string match -q '*Would you like to run the following command?*' -- "$clean"
                 set detail "コマンド実行の承認待ち"
             else if string match -q '*Press enter to confirm or esc to cancel*' -- "$clean"
@@ -737,7 +747,7 @@ function __ai_claude_notify_detail --argument-names state
         set -l clean (__ai_notify_clean_detail "$line")
         test -n "$clean"; or continue
 
-        if test "$state" = waiting
+        if test "$state" = blocked -o "$state" = waiting
             if string match -q '*Enter to select*↑/↓ to navigate*Esc to cancel*' -- "$clean"
                 test -n "$prev_non_empty"; and set detail "$prev_non_empty"
             else if string match -q '*Do you want to proceed?*' -- "$clean"
@@ -781,6 +791,8 @@ function __ai_notify_detail --argument-names state app display
 
     if test -z "$detail"
         switch "$state"
+            case blocked
+                set detail "承認プロンプトで停止"
             case waiting
                 set detail "確認待ち"
             case idle
@@ -840,6 +852,9 @@ function __ai_notify_state_change --argument-names pane_id new_state old_state d
     set -l message
     set -l sound
     switch "$new_state"
+        case blocked
+            set message "⚠ 承認待ちで停止 · $detail"
+            set sound Basso
         case waiting
             set message "確認待ち · $detail"
             set sound Tink
@@ -918,7 +933,9 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
     # v48: Claude の working/idle は capture-pane (active spinner / shell / monitor>=2) を唯一の
     #      源にし、idle 中も animate する title の braille スピナーを working 根拠から外す。
     # v49: agmsg 撤去。list-panes format から @agmsg_unread_summary を除去。
-    set -l state_version 50
+    # v51: blocked 状態 (承認プロンプトで停止) を追加。! 赤マーカー + Basso 通知。
+    # v52: sub-agent 進捗行 (◯) を working 検出。Codex background terminal running の false positive 修正。
+    set -l state_version 52
     while true
         # ===== Section 1: 初期化 (loop 毎の状態リセット) =====
         set -l lines
@@ -942,7 +959,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
         # tmux list-panes で全 pane の option を 1 回でまとめて取得する (毎 pane に
         # show-option を打つより速い)。format string の field 数を変えたら、下の
         # `string split -m N` (parts 配列の総数 - 1) も合わせて更新すること。
-        set -l raw (tmux list-panes -s -F '#{window_index}.#{pane_index}	#{pane_title}	#{@fixed_title}	#{@ai_base_title}	#{@ai_sidebar}	#{pane_current_path}	#{window_index}	#{@ai_display_index}	#{pane_current_command}	#{pane_id}	#{@ai_state}	#{@ai_state_since}	#{@ai_state_version}	#{pane_active}	#{window_id}	#{@ai_codex_started_at}	#{@ai_codex_session_file}	#{@ai_codex_cwd}	#{@ai_app}	#{@ai_claude_session_id}	#{@ai_claude_cwd}	#{window_name}	#{@ai_title_source}' 2>/dev/null)
+        set -l raw (tmux list-panes -s -F '#{window_index}.#{pane_index}	#{pane_title}	#{@fixed_title}	#{@ai_base_title}	#{@ai_sidebar}	#{pane_current_path}	#{window_index}	#{@ai_display_index}	#{pane_current_command}	#{pane_id}	#{@ai_state}	#{@ai_state_since}	#{@ai_state_version}	#{pane_active}	#{window_id}	#{@ai_codex_started_at}	#{@ai_codex_session_file}	#{@ai_codex_cwd}	#{@ai_app}	#{@ai_claude_session_id}	#{@ai_claude_cwd}	#{window_name}	#{@ai_title_source}	#{@tmux_bridge_role}	#{@tmux_bridge_task}' 2>/dev/null)
         # 自分自身の @ai_sidebar を見て writer 判定する。
         # 旧: session 内最初の writer だけ writer 認定 → 2 つ目以降の sidebar pane
         # (window 2, 3, ... の writer) が is_writer=0 のまま動き、state_version self-check
@@ -959,7 +976,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
         #   - sidebar と同じ window で active な Codex/Claude pane を active_* 変数に記録
         set -l entries
         for line in $raw
-            set -l parts (string split -m 22 \t -- $line)
+            set -l parts (string split -m 24 \t -- $line)
             set -l loc $parts[1]
             set -l title $parts[2]
             set -l fixed_title $parts[3]
@@ -982,6 +999,8 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             set -l claude_cwd $parts[21]
             set -l window_name $parts[22]
             set -l title_source $parts[23]
+            set -l bridge_role $parts[24]
+            set -l bridge_task $parts[25]
             set -l codex_session_id (__ai_codex_session_id_from_title "$title")
 
             test "$loc" = (tmux display-message -p -t "$TMUX_PANE" '#{window_index}.#{pane_index}' 2>/dev/null); and continue
@@ -1004,9 +1023,13 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
                 set is_claude_console 1
             end
 
-            if test -n "$fixed_title"
+            if test -n "$bridge_task"
+                set display $bridge_task
+            else if test -n "$fixed_title"
                 set display $fixed_title
-            else if test -n "$base_title"
+            else if test -n "$bridge_role"
+                set display $bridge_role
+            else if test -n "$base_title"; and not string match -q '\[tmux-bridge *' -- "$base_title"
                 set display $base_title
             else if test "$is_codex_console" = 1; and test "$title" = (basename "$path")
                 set display (string replace "$HOME" "~" -- "$path")
@@ -1045,7 +1068,13 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
                         tmux set-option -p -t "$pane_id" @ai_codex_session_file "$resolved_session_file" 2>/dev/null
                     end
                     set -l resolved_title (__ai_codex_title_for_session "$resolved_session_file")
-                    if test -n "$resolved_title"; and begin
+                    if test -n "$resolved_title"; and string match -q '\[tmux-bridge *' -- "$resolved_title"
+                        if string match -q '\[tmux-bridge *' -- "$base_title"
+                            tmux set-option -p -t "$pane_id" @ai_base_title "" 2>/dev/null
+                            tmux set-option -p -t "$pane_id" @ai_title_source "" 2>/dev/null
+                            tmux set-option -p -t "$pane_id" @ai_title_updated_at (date +%s) 2>/dev/null
+                        end
+                    else if test -n "$resolved_title"; and begin
                             test "$base_title" != "$resolved_title"
                             or not contains -- "$title_source" codex-goal codex-thread codex-sidebar
                         end
@@ -1059,24 +1088,28 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             set -l visible
             set -l codex_user_waiting 0
             set -l codex_working 0
+            set -l codex_blocked 0
             if test "$is_codex_console" = 1
                 set visible (tmux capture-pane -p -J -t "$pane_id" 2>/dev/null | tail -24)
                 set -l codex_visible_state (printf '%s\n' $visible | __ai_codex_visible_state)
-                if test "$codex_visible_state" = waiting
+                if test "$codex_visible_state" = blocked
+                    set codex_blocked 1
+                else if test "$codex_visible_state" = waiting
                     set codex_user_waiting 1
                 else if test "$codex_visible_state" = working
                     set codex_working 1
                 end
             end
 
-            # Claude pane 側でも capture-pane で AskUserQuestion / Permission prompt を拾う。
-            # title だけだと braille アニメ文字で working と誤判定されるため。
             set -l claude_user_waiting 0
             set -l claude_working 0
+            set -l claude_blocked 0
             if test "$is_claude_console" = 1
                 set visible (tmux capture-pane -p -J -t "$pane_id" 2>/dev/null | tail -24)
                 set -l claude_visible_state (printf '%s\n' $visible | __ai_claude_visible_state)
-                if test "$claude_visible_state" = waiting
+                if test "$claude_visible_state" = blocked
+                    set claude_blocked 1
+                else if test "$claude_visible_state" = waiting
                     set claude_user_waiting 1
                 else if test "$claude_visible_state" = working
                     set claude_working 1
@@ -1093,10 +1126,13 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             test "$is_llm_console" = 1; and set console_kind llm
 
             set -l detected_state idle
-            if test "$codex_user_waiting" = 1
+            if test "$codex_blocked" = 1
+                set detected_state blocked
+            else if test "$claude_blocked" = 1
+                set detected_state blocked
+            else if test "$codex_user_waiting" = 1
                 set detected_state waiting
             else if test "$claude_user_waiting" = 1
-                # AskUserQuestion / Permission prompt 表示中は braille title より優先する
                 set detected_state waiting
             else if test "$codex_working" = 1
                 set detected_state working
@@ -1173,7 +1209,10 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             set -l kind_sort_key 0
             test "$console_kind" = llm; and set kind_sort_key 1
 
-            if test "$display_state" = waiting
+            if test "$display_state" = blocked
+                set -l row (printf '%s ! %s' "$state_since" "$display")
+                set -a entries (printf 'blocked\t%s\t%s\t%s\tred\t%s\t%s\t%s\t%s\t%s' "$state_sort_key" "$kind_sort_key" "$console_kind" "$row" "$pane_id" "$window_index" "$window_name" "$window_id")
+            else if test "$display_state" = waiting
                 set -l row (printf '%s ? %s' "$state_since" "$display")
                 set -a entries (printf 'waiting\t%s\t%s\t%s\tyellow\t%s\t%s\t%s\t%s\t%s' "$state_sort_key" "$kind_sort_key" "$console_kind" "$row" "$pane_id" "$window_index" "$window_name" "$window_id")
             else if test "$display_state" = working
@@ -1254,7 +1293,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             set -a line_texts "$header_short"
             set -a line_targets "$window_id_local"
 
-            for bucket in working waiting idle
+            for bucket in blocked working waiting idle
                 for item in (printf '%s\n' $window_entries | sort -r)
                     set -l row_parts (string split -m 9 \t -- "$item")
                     set -l row_bucket $row_parts[1]
@@ -1271,7 +1310,9 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
                     if test "$row_kind" = llm
                         set color_prefix (set_color -b $llm_bg_color)
                     end
-                    if test "$row_color" = yellow
+                    if test "$row_color" = red
+                        set -a lines " "$color_prefix(set_color red)$short_row(set_color normal)
+                    else if test "$row_color" = yellow
                         set -a lines " "$color_prefix(set_color yellow)$short_row(set_color normal)
                     else if test "$row_color" = green
                         set -a lines " "$color_prefix(set_color green)$short_row(set_color normal)
