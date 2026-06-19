@@ -1186,6 +1186,9 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
                             set suppress_notification 1
                         end
                     end
+                    if test "$detected_state" = idle; and string match -q 'worker*' -- "$bridge_role"
+                        set suppress_notification 1
+                    end
                     if test "$suppress_notification" = 0
                         set -l notify_detail (__ai_notify_detail "$detected_state" "$notify_app" "$display" $visible)
                         __ai_notify_state_change "$pane_id" "$detected_state" "$cached_state" "$display" "$notify_app" "$notify_detail"
