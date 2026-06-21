@@ -13,6 +13,7 @@ source "$SCRIPT_DIR/lib/terraform.sh"
 source "$SCRIPT_DIR/lib/hermes.sh"
 source "$SCRIPT_DIR/lib/gws.sh"
 source "$SCRIPT_DIR/lib/python.sh"
+source "$SCRIPT_DIR/lib/playwright.sh"
 source "$SCRIPT_DIR/lib/maintenance.sh"
 
 MODE="${1:-all}"
@@ -175,6 +176,13 @@ if [ "$MODE" = "npm" ]; then
   exit 0
 fi
 
+if [ "$MODE" = "playwright" ]; then
+  update_npm_globals
+  ensure_playwright_chromium
+  echo "完了しました"
+  exit 0
+fi
+
 if [ "$MODE" = "fish" ]; then
   echo "=== Fish 設定同期 ==="
   echo "--- Fish 設定ファイルコピー ---"
@@ -209,7 +217,7 @@ fi
 
 if [ "$MODE" != "all" ]; then
   echo "エラー: 未知の MODE です: $MODE"
-  echo "利用可能: all, hermes, gws, python, npm, fish, karabiner, docker, maintenance"
+  echo "利用可能: all, hermes, gws, python, npm, playwright, fish, karabiner, docker, maintenance"
   exit 1
 fi
 
@@ -309,6 +317,7 @@ echo ""
 
 # === npm グローバルパッケージ ===
 update_npm_globals
+ensure_playwright_chromium
 
 # === Python automation packages ===
 ensure_python_tools

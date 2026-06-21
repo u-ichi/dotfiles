@@ -76,7 +76,7 @@ dotfiles 側では扱わない。詳細は claude.codex の `install.sh` と `do
 
 | スクリプト | 役割 |
 |-----------|------|
-| `install.sh` | 初回セットアップと日常更新の単一エントリポイント。Brewfile 適用 / 更新、Hermes Agent 導入、設定ファイルコピー、Git ローカル設定の対話的入力、AWS 設定の再展開、Claude Code / mkcert / Fisher / Terraform / npm / Python tools の同期、macOS defaults 適用、日次メンテナンス LaunchAgent 登録を行う。第 1 引数で MODE (`hermes` / `gws` / `python` / `npm` / `fish` / `docker` / `maintenance`) を指定するとそのモジュールだけ再実行する |
+| `install.sh` | 初回セットアップと日常更新の単一エントリポイント。Brewfile 適用 / 更新、Hermes Agent 導入、設定ファイルコピー、Git ローカル設定の対話的入力、AWS 設定の再展開、Claude Code / mkcert / Fisher / Terraform / npm / Playwright browser binary / Python tools の同期、macOS defaults 適用、日次メンテナンス LaunchAgent 登録を行う。第 1 引数で MODE (`hermes` / `gws` / `python` / `npm` / `playwright` / `fish` / `docker` / `maintenance`) を指定するとそのモジュールだけ再実行する |
 | `scripts/docker-disk-maintenance.sh` | Docker Desktop の `Docker.raw` とホスト空き容量を確認し、古い build cache と未使用 image / stopped container / unused network を削除する。volume は削除しない |
 | `scripts/cleanup-local-disk.sh` | Codex Crashpad dump、crude-morning-report の SQLite backup、aws-cliniconnect-terraform の `.terraform` cache、Homebrew cache を整理する。既定は dry-run、日次メンテナンスでは `--apply` で実行する |
 | `scripts/daily-maintenance.sh` | dotfiles worktree が clean の場合に `git pull --ff-only` と `./install.sh` を実行し、その後 `cleanup-local-disk.sh --apply`、Codex 要約、Slack 投稿を行う |
@@ -120,6 +120,7 @@ MODE を追加・変更する場合、認証情報や手動ログインなど re
 | `gws` | `update_gws` (未導入なら install、導入済みなら brew outdated 判定) |
 | `python` | `ensure_python_tools` (uv venv + Pythonfile) |
 | `npm` | `update_npm_globals` (Npmfile) |
+| `playwright` | `update_npm_globals` (Npmfile) の後に `ensure_playwright_chromium` で Codex headless browser 検証用 Chromium binary を導入 |
 | `fish` | Fish 設定ファイルをコピーし、Fisher を導入または `fisher update` で `fish_plugins` を復元 |
 | `docker` | Docker Desktop AutoStart を有効化し、`docker-disk-maintenance` と LaunchAgent を同期 |
 | `maintenance` | `dotfiles-daily-maintenance` / `dotfiles-cleanup-local-disk` の配置、`~/.config/dotfiles-maintenance/env` テンプレート作成、日次 LaunchAgent 登録 |
