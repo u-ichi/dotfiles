@@ -12,6 +12,13 @@ end
 set -gx NODE_EXTRA_CA_CERTS "$HOME/Library/Application Support/mkcert/rootCA.pem"
 
 if status is-interactive
+    # ~/agent/projects 配下の repo は、任意の場所からディレクトリ名だけで cd できるようにする。
+    # CDPATH は fish 標準の cd 補完にも使われる。
+    set -l agent_projects "$HOME/agent/projects"
+    if test -d "$agent_projects"; and not contains -- "$agent_projects" $CDPATH
+        set -gx CDPATH $CDPATH "$agent_projects"
+    end
+
     # bobthefish: git リポジトリ内ではプロジェクトルートより上の親パスを非表示
     set -g theme_show_project_parent no
 
