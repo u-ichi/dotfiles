@@ -10,6 +10,9 @@ function __ai_pane_title_sync_set_base --argument-names pane_id title source
     set -l clean_title (__ai_pane_title_sync_clean "$title")
     test -n "$clean_title"; or return 1
 
+    # tmux-bridge ヘッダは base_title に記録しない (表示が壊れるため)
+    string match -q '\[tmux-bridge *' -- "$clean_title"; and return 0
+
     tmux set-option -p -t "$pane_id" @ai_base_title "$clean_title" 2>/dev/null
     test -n "$source"; and tmux set-option -p -t "$pane_id" @ai_title_source "$source" 2>/dev/null
     tmux set-option -p -t "$pane_id" @ai_title_updated_at (date +%s) 2>/dev/null
@@ -32,9 +35,6 @@ function __ai_pane_title_sync_clear --argument-names pane_id
     tmux set-option -p -t "$pane_id" @ai_claude_started_at "" 2>/dev/null
     tmux set-option -p -t "$pane_id" @ai_claude_cwd "" 2>/dev/null
     tmux set-option -p -t "$pane_id" @ai_claude_session_id "" 2>/dev/null
-    tmux set-option -p -t "$pane_id" @agmsg_active_identity "" 2>/dev/null
-    tmux set-option -p -t "$pane_id" @agmsg_display_identity "" 2>/dev/null
-    tmux set-option -p -t "$pane_id" @agmsg_identity_source "" 2>/dev/null
 end
 
 function __ai_pane_title_sync_codex_session_start_epoch --argument-names file
@@ -71,6 +71,7 @@ function __ai_pane_title_sync_codex_find_session_file --argument-names cwd start
 
     set -l best_file
     set -l best_delta 999999999
+    set -l candidate_count 0
     for file in (command find "$sessions_dir" -type f -name 'rollout-*.jsonl' -mtime -3 2>/dev/null)
         set -l session_cwd (command head -n 1 "$file" | command jq -r 'select(.type == "session_meta") | .payload.cwd // empty' 2>/dev/null)
         test "$session_cwd" = "$cwd"; or continue
@@ -78,13 +79,16 @@ function __ai_pane_title_sync_codex_find_session_file --argument-names cwd start
         set -l session_started (__ai_pane_title_sync_codex_session_start_epoch "$file")
         string match -qr '^[0-9]+$' -- "$session_started"; or continue
         set -l delta (math "$session_started - $started_at")
-        if test "$delta" -ge -5; and test "$delta" -le 30; and test "$delta" -lt "$best_delta"
-            set best_delta "$delta"
-            set best_file "$file"
+        if test "$delta" -ge -5; and test "$delta" -le 30
+            set candidate_count (math "$candidate_count + 1")
+            if test "$delta" -lt "$best_delta"
+                set best_delta "$delta"
+                set best_file "$file"
+            end
         end
     end
 
-    test -n "$best_file"; and printf '%s\n' "$best_file"
+    test "$candidate_count" -eq 1; and test -n "$best_file"; and printf '%s\n' "$best_file"
 end
 
 function __ai_pane_title_sync_codex_session_id_from_file --argument-names file
@@ -185,7 +189,13 @@ function __ai_pane_title_sync_codex_watch --argument-names pane_id cwd started_a
             end
             set -l current_base_title (tmux show-option -pqv -t "$pane_id" @ai_base_title 2>/dev/null)
             set -l current_source (tmux show-option -pqv -t "$pane_id" @ai_title_source 2>/dev/null)
-            if test -n "$title"; and begin
+            if test -n "$title"; and string match -q '\[tmux-bridge *' -- "$title"
+                if string match -q '\[tmux-bridge *' -- "$current_base_title"
+                    tmux set-option -p -t "$pane_id" @ai_base_title "" 2>/dev/null
+                    tmux set-option -p -t "$pane_id" @ai_title_source "" 2>/dev/null
+                    tmux set-option -p -t "$pane_id" @ai_title_updated_at (date +%s) 2>/dev/null
+                end
+            else if test -n "$title"; and begin
                     test "$title" != "$last_title"
                     or test "$current_base_title" != "$title"
                     or test "$current_source" != "$source"

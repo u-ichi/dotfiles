@@ -43,7 +43,6 @@
 │   ├── tmux/update-ai-display-indexes.sh # tmux AI sidebar 用表示番号の再採番
 │   ├── tmux/cleanup-ai-sidebars.sh # orphan 化した tmux AI sidebar の削除
 │   ├── tmux/ai-sidebar-click.sh   # tmux AI sidebar のクリック解決
-│   ├── tmux/agmsg-tmux-*.sh       # agmsg の到達範囲を tmux window に束ねる agent 内部 helper
 │   ├── tmux/test-ai-sidebars-isolated.sh # 専用 socket 上の tmux AI sidebar 検証
 │   ├── ghostty/config          # Ghostty ターミナル設定
 │   ├── glow/glow.yml           # Glow (markdown viewer) 設定
@@ -86,7 +85,6 @@ dotfiles 側では扱わない。詳細は claude.codex の `install.sh` と `do
 | `.config/tmux/update-ai-display-indexes.sh` | tmux pane の増減後に AI sidebar 用の表示番号 (`@ai_display_index`) だけを再採番する。sidebar の作成や layout 変更は行わない |
 | `.config/tmux/cleanup-ai-sidebars.sh` | 通常 pane が残っていない window の orphan sidebar を閉じる |
 | `.config/tmux/ai-sidebar-click.sh` | AI sidebar のクリック行から対象 pane を解決して移動する。`AI_SIDEBAR_CLICK_DRY_RUN=1` では対象 pane の出力だけ行う |
-| `.config/tmux/agmsg-tmux-*.sh` | `agmsg` の team を tmux socket/session/window から生成し、同一 tmux window 内の AI session だけが同じ message scope に入るよう補助する agent 内部 helper。source pane/team が一意に確定しない場合や別 window 宛は送信しない。`agmsg-tmux-notify.sh` は unread を read-only 集計し pane title/sidebar 用の summary を更新する。実用 UX と作業計画の基準資料は [`docs/agmsg-practical-ux-design.html`](agmsg-practical-ux-design.html) |
 | `.config/tmux/test-ai-sidebars-isolated.sh` | 専用 socket の disposable tmux server だけを使い、sidebar 既定有効化と新規 window hook を検証する |
 | `scripts/check-tmux-safety.sh` | server-wide kill が `-S` / `-L` なしで記述されていないかを検出する。`lint.sh` と pre-commit hook から実行する |
 
