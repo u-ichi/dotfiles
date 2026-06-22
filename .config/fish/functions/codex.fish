@@ -79,6 +79,21 @@ function __codex_run
     return $exit_code
 end
 
+function __codex_should_bypass_agent_hub
+    set -q AGENT_HUB_AUTO_WRAP_ACTIVE; and return 0
+    set -q AGENT_HUB_AUTO_WRAP_BYPASS; and return 0
+    return 1
+end
+
+function __codex_run_agent_hub_interactive
+    if __codex_should_bypass_agent_hub; or not type -q agent-hub
+        command codex $argv
+        return $status
+    end
+
+    command env AGENT_HUB_AUTO_WRAP_ACTIVE=1 agent-hub codex $argv
+end
+
 function __codex_reset_pane_title
     if not set -q TMUX
         return
@@ -225,14 +240,14 @@ function __codex_run_interactive
         set -l sandbox_mode (__codex_explicit_sandbox_mode $normalized_argv)
         switch "$sandbox_mode"
             case read-only
-                command codex $normalized_argv
+                __codex_run_agent_hub_interactive $normalized_argv
             case workspace-write danger-full-access
-                command codex --add-dir "$dotfiles_agent_add_dir" $normalized_argv
+                __codex_run_agent_hub_interactive --add-dir "$dotfiles_agent_add_dir" $normalized_argv
             case '*'
-                command codex -s workspace-write --add-dir "$dotfiles_agent_add_dir" $normalized_argv
+                __codex_run_agent_hub_interactive -s workspace-write --add-dir "$dotfiles_agent_add_dir" $normalized_argv
         end
     else
-        command codex $normalized_argv
+        __codex_run_agent_hub_interactive $normalized_argv
     end
     set -l exit_code $status
     if test -n "$watcher_pid"
@@ -253,7 +268,7 @@ function codex --description "Codex CLI を起動"
     # 非対話 subcommand は Codex 本体へそのまま渡す。resume/fork/-C は TUI なので title sync を通す。
     for arg in $argv
         switch $arg
-            case exec e review login logout mcp plugin mcp-server app-server app completion sandbox debug apply a cloud exec-server features help
+            case exec e review login logout mcp plugin mcp-server app-server remote-control app completion update doctor sandbox debug apply a archive delete unarchive cloud exec-server features help
                 __codex_run $argv
                 return
             case resume fork

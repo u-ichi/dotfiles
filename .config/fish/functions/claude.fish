@@ -63,6 +63,55 @@ function __claude_fallback_title
     printf '%s\n' "$title"
 end
 
+function __claude_should_bypass_agent_hub
+    set -q AGENT_HUB_AUTO_WRAP_ACTIVE; and return 0
+    set -q AGENT_HUB_AUTO_WRAP_BYPASS; and return 0
+    return 1
+end
+
+function __claude_run_agent_hub_interactive
+    if __claude_should_bypass_agent_hub; or not type -q agent-hub
+        command claude $argv
+        return $status
+    end
+
+    command env AGENT_HUB_AUTO_WRAP_ACTIVE=1 agent-hub claude $argv
+end
+
+function __claude_should_run_direct
+    if not isatty stdin
+        return 0
+    end
+    if not isatty stdout
+        return 0
+    end
+
+    for arg in $argv
+        switch $arg
+            case -p --print --help -h --version -v
+                return 0
+        end
+    end
+
+    set -l first_non_option
+    for arg in $argv
+        switch $arg
+            case '-*'
+                continue
+            case '*'
+                set first_non_option "$arg"
+                break
+        end
+    end
+
+    switch "$first_non_option"
+        case agents auth auto-mode doctor install mcp plugin plugins project setup-token ultrareview update upgrade
+            return 0
+    end
+
+    return 1
+end
+
 # Claude Code 起動の内部ヘルパ。worktree モードのフラグ分岐から共通で呼ぶ。
 #
 # session 情報 (session_id / cwd / started_at) の pane option 書き込みは
@@ -83,7 +132,7 @@ function __claude_run
         __ai_pane_title_sync mark-app "$TMUX_PANE" claude
     end
 
-    command claude $argv
+    __claude_run_agent_hub_interactive $argv
     set -l exit_code $status
 
     # 終了時の pane title リセット。
@@ -104,6 +153,11 @@ function __claude_run
 end
 
 function claude --description "Claude Code を起動"
+    if __claude_should_run_direct $argv
+        command claude $argv
+        return $status
+    end
+
     set -l repo (git rev-parse --show-toplevel 2>/dev/null)
     if test $status -eq 0
         set repo (__claude_physical_path "$repo")
