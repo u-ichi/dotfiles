@@ -935,7 +935,8 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
     # v49: agmsg 撤去。list-panes format から @agmsg_unread_summary を除去。
     # v51: blocked 状態 (承認プロンプトで停止) を追加。! 赤マーカー + Basso 通知。
     # v52: sub-agent 進捗行 (◯) を working 検出。Codex background terminal running の false positive 修正。
-    set -l state_version 53
+    # v53: worker pane (tmux-bridge role が設定済かつ controller でない) の全通知を抑制。
+    set -l state_version 54
     while true
         # ===== Section 1: 初期化 (loop 毎の状態リセット) =====
         set -l lines
@@ -1186,7 +1187,7 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
                             set suppress_notification 1
                         end
                     end
-                    if test "$detected_state" = idle; and string match -q 'worker*' -- "$bridge_role"
+                    if test -n "$bridge_role"; and test "$bridge_role" != controller
                         set suppress_notification 1
                     end
                     if test "$suppress_notification" = 0
