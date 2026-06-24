@@ -11,6 +11,9 @@ end
 # mkcert のルート CA を Node.js に信頼させる（ctxledger MCP 等の自己署名証明書用）
 set -gx NODE_EXTRA_CA_CERTS "$HOME/Library/Application Support/mkcert/rootCA.pem"
 
+# Codex / Playwright のブラウザバイナリ cache を host 側の固定場所に揃える。
+set -gx PLAYWRIGHT_BROWSERS_PATH "$HOME/Library/Caches/ms-playwright"
+
 if status is-interactive
     # ~/agent/projects 配下の repo は、任意の場所からディレクトリ名だけで cd できるようにする。
     # CDPATH は fish 標準の cd 補完にも使われる。

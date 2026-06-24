@@ -32,6 +32,8 @@ brew 'gradle'
 brew 'kotlin'
 brew 'mkcert'
 brew 'neovim'
+# Playwright の import 可能な Node.js package は Npmfile で管理する。
+# Homebrew 側は実行基盤の node を管理する（`playwright` formula は存在しない）。
 brew 'node'
 brew 'nodenv'
 brew 'pnpm'
