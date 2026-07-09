@@ -41,6 +41,25 @@ if [ -z "$target" ]; then
 fi
 [ -z "$target" ] && exit 0
 
+# url: prefix なら、pane 切替ではなく URL を open する (Backlog.md browser 等)。
+case "$target" in
+  url:*)
+    url="${target#url:}"
+    printf '%s url_click mouse_pane=%s mouse_y=%s line_no=%s url=%s\n' \
+      "$(date '+%H:%M:%S')" "$mouse_pane" "$mouse_y" "$line_no" "$url" >>"$log_file" 2>/dev/null || true
+    if [ "${AI_SIDEBAR_CLICK_DRY_RUN:-}" = "1" ]; then
+      printf '%s\n' "$target"
+      exit 0
+    fi
+    if command -v open >/dev/null 2>&1; then
+      open "$url" >/dev/null 2>&1 || true
+    elif command -v xdg-open >/dev/null 2>&1; then
+      xdg-open "$url" >/dev/null 2>&1 || true
+    fi
+    exit 0
+    ;;
+esac
+
 target_pane="$target"
 case "$target_pane" in
   %*) ;;

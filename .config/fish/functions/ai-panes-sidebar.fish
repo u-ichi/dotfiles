@@ -339,6 +339,181 @@ function __ai_codex_title_for_session --argument-names session_file
     __ai_codex_thread_title "$session_file"
 end
 
+function __ai_backlog_repo_root --argument-names active_cwd
+    test -d "$active_cwd"; or return 1
+    set -l scan_dir "$active_cwd"
+    while test -n "$scan_dir"; and test "$scan_dir" != /
+        for candidate in "$scan_dir/backlog/config.yml" "$scan_dir/backlog.config.yml" "$scan_dir/.backlog/config.yml"
+            if test -f "$candidate"
+                printf '%s\n' "$scan_dir"
+                return 0
+            end
+        end
+        if test -e "$scan_dir/.git"
+            break
+        end
+        set scan_dir (dirname "$scan_dir")
+    end
+    return 1
+end
+
+function __ai_backlog_url_from_repo_root --argument-names repo_root
+    # repo_root 配下の backlog config.yml から default_port を読み、
+    # Tailscale IPv4 (取得不能なら 127.0.0.1) と組み合わせた URL を返す。
+    # pane option `@ai_backlog_url` は 1 pane が別 project 間を跨ぐと stale になるため、
+    # 描画時に cwd から都度算出する方式に統一 (SessionStart hook 側の書き込みには依存しない)。
+    test -n "$repo_root"; or return 1
+    set -l config
+    for candidate in "$repo_root/backlog/config.yml" "$repo_root/backlog.config.yml" "$repo_root/.backlog/config.yml"
+        if test -f "$candidate"
+            set config "$candidate"
+            break
+        end
+    end
+    test -n "$config"; or return 1
+    set -l port (command grep -E '^default_port:' "$config" 2>/dev/null | command awk '{print $2}' | command tr -d '"')
+    if not string match -qr '^[0-9]+$' -- "$port"
+        set port 6420
+    end
+    set -l ip (command tailscale ip -4 2>/dev/null | command head -1 | command tr -d '[:space:]')
+    if not string match -qr '^([0-9]{1,3}\.){3}[0-9]{1,3}$' -- "$ip"
+        set ip 127.0.0.1
+    end
+    printf 'http://%s:%s/\n' "$ip" "$port"
+end
+
+function __ai_backlog_tasks_mtime --argument-names repo_root
+    set -l tasks_dir "$repo_root/backlog/tasks"
+    if not test -d "$tasks_dir"
+        printf '0\n'
+        return 0
+    end
+    set -l latest (command find "$tasks_dir" -type f -name '*.md' -exec stat -f '%m' {} + 2>/dev/null | sort -nr | head -1)
+    if test -z "$latest"
+        set latest 0
+    end
+    printf '%s\n' "$latest"
+end
+
+function __ai_backlog_status_rows --argument-names repo_root status_label limit_count max_line_chars
+    # priority label `[HIGH]` 等は省略可能。無指定 repo (例 shinho-navi) にも対応する。
+    set -l rows (cd "$repo_root"; and command backlog task list --plain --status "$status_label" 2>/dev/null | command sed -nE 's/^[[:space:]]+(\[[^]]+\][[:space:]]+)?(TASK-[0-9]+(\.[0-9]+)*)[[:space:]]+-[[:space:]]+(.*)$/\2\t\4/p')
+    # status を 1 文字 marker に圧縮して title の可視領域を確保する (「(In Progress)」等の長い prefix を避ける)。
+    set -l marker
+    switch "$status_label"
+        case 'In Progress'
+            set marker '▶'
+        case 'To Do'
+            set marker '○'
+        case Done
+            set marker '✓'
+        case '*'
+            set marker '-'
+    end
+    set -l emitted 0
+    for row in $rows
+        if string match -qr '^[0-9]+$' -- "$limit_count"; and test "$limit_count" -gt 0; and test "$emitted" -ge "$limit_count"
+            break
+        end
+        set -l parts (string split -m 1 \t -- "$row")
+        test (count $parts) -ge 2; or continue
+        set -l task_id "$parts[1]"
+        set -l title "$parts[2]"
+        # 左インデントは 1 space だけ (detail_lines がさらに 1 space 追加するので視覚的に 1 space になる)。
+    set -l text (string shorten -m $max_line_chars -- (printf '%s %s %s' "$marker" "$task_id" "$title"))
+        printf 'task\t%s\t%s\n' "$task_id" "$text"
+        set emitted (math "$emitted + 1")
+    end
+end
+
+function __ai_backlog_task_records --argument-names active_cwd max_line_chars
+    set -l repo_root (__ai_backlog_repo_root "$active_cwd")
+    test -n "$repo_root"; or return 1
+    command -q backlog; or return 1
+
+    # URL は cwd (=repo_root) から算出する。pane option `@ai_backlog_url` は
+    # 1 pane が別 project cwd を跨ぐと stale になるため参照しない。
+    set -l backlog_url (__ai_backlog_url_from_repo_root "$repo_root")
+
+    set -l repo_key (string escape --style=var -- "$repo_root")
+    set -l mtime (__ai_backlog_tasks_mtime "$repo_root")
+    set -l mtime_var "__ai_backlog_task_lines_mtime_$repo_key"
+    set -l url_var "__ai_backlog_task_lines_url_$repo_key"
+    set -l cache_var "__ai_backlog_task_lines_cache_$repo_key"
+
+    # cache は backlog/tasks/ の mtime だけでなく backlog_url もキーに含める
+    # (tailscale IP 変動時に旧 URL の hyperlink が残らないようにする)。
+    if set -q $mtime_var; and test "$$mtime_var" = "$mtime"; \
+        and set -q $url_var; and test "$$url_var" = "$backlog_url"; \
+        and set -q $cache_var
+        printf '%s\n' $$cache_var
+        return 0
+    end
+
+    set -l records
+    # 見出しは短く「Backlog.md」だけを表示し、URL は click target のみ持たせる。
+    set -l header "Backlog.md"
+    set -a records (printf 'header\t%s\t%s' "$header" "$backlog_url")
+
+    set -a records (__ai_backlog_status_rows "$repo_root" "In Progress" 0 "$max_line_chars")
+    set -a records (__ai_backlog_status_rows "$repo_root" "To Do" 5 "$max_line_chars")
+
+    set -g $mtime_var "$mtime"
+    set -g $url_var "$backlog_url"
+    set -g $cache_var $records
+    printf '%s\n' $records
+end
+
+function __ai_format_claude_task_record --argument-names record max_line_chars
+    set -l parts (string split \t -- "$record")
+    test (count $parts) -ge 3; or return 1
+    set -l kind "$parts[2]"
+    switch "$kind"
+        case goal
+            printf '%s\n' (string shorten -m $max_line_chars -- "$parts[3]")
+        case root
+            test (count $parts) -ge 6; or return 1
+            set -l item_status "$parts[3]"
+            set -l count "$parts[5]"
+            set -l subject "$parts[6]"
+            set -l marker -
+            set -l color_start ""
+            set -l color_end ""
+            switch "$item_status"
+                case completed
+                    set marker '✓'
+                case in_progress
+                    set marker '▶'
+                    set color_start (set_color green)
+                    set color_end (set_color normal)
+            end
+            set -l shortened
+            if test "$count" = "0/0"
+                set shortened (string shorten -m $max_line_chars -- (printf '%s %s' "$marker" "$subject"))
+            else
+                set shortened (string shorten -m $max_line_chars -- (printf '%s %s %s' "$marker" "$count" "$subject"))
+            end
+            printf '%s%s%s\n' "$color_start" "$shortened" "$color_end"
+        case child
+            test (count $parts) -ge 5; or return 1
+            set -l item_status "$parts[3]"
+            set -l subject "$parts[5]"
+            set -l marker -
+            set -l color_start ""
+            set -l color_end ""
+            switch "$item_status"
+                case completed
+                    set marker '✓'
+                case in_progress
+                    set marker '▶'
+                    set color_start (set_color green)
+                    set color_end (set_color normal)
+            end
+            set -l shortened (string shorten -m $max_line_chars -- (printf '  %s %s' "$marker" "$subject"))
+            printf '%s%s%s\n' "$color_start" "$shortened" "$color_end"
+    end
+end
+
 function __ai_claude_task_lines --argument-names session_file max_line_chars max_display_lines
     if not command -q jq
         return 1
@@ -370,12 +545,14 @@ function __ai_claude_task_lines --argument-names session_file max_line_chars max
               | if .name == "TaskCreate" then
                   {kind: "create_use", tuid: .id, subject: .input.subject,
                    parent: ((.input.metadata // {}).parentTaskId // ""),
-                   goal: ((.input.metadata // {}).goal // "")}
+                   goal: ((.input.metadata // {}).goal // ""),
+                   backlogTask: ((.input.metadata // {}).backlogTask // "")}
                 else
                   {kind: "update", tid: (.input.taskId // ""),
                    subject: (.input.subject // null),
                    status: (.input.status // null),
-                   parent: ((.input.metadata // {}).parentTaskId // null)}
+                   parent: ((.input.metadata // {}).parentTaskId // null),
+                   backlogTask: ((.input.metadata // {}).backlogTask // null)}
                 end
             ),
             (
@@ -386,13 +563,13 @@ function __ai_claude_task_lines --argument-names session_file max_line_chars max
             )
         ]
         | reduce .[] as $e (
-            {creates: {}, tasks: {}, order: [], goal: null};
+            {creates: {}, tasks: {}, order: [], goal: null, completion_seq: 0};
             if $e.kind == "create_use" then
-              .creates[$e.tuid] = {subject: $e.subject, parent: $e.parent, goal: $e.goal}
+              .creates[$e.tuid] = {subject: $e.subject, parent: $e.parent, goal: $e.goal, backlogTask: $e.backlogTask}
             elif $e.kind == "create_result" then
               (.creates[$e.tuid] // null) as $c
               | if $c then
-                  .tasks[$e.tid] = {id: $e.tid, subject: $c.subject, parent: $c.parent, status: "pending"}
+                  .tasks[$e.tid] = {id: $e.tid, subject: $c.subject, parent: $c.parent, status: "pending", backlogTask: $c.backlogTask, completion_seq: null}
                   | .order += [$e.tid]
                   | (if $c.goal != "" then .goal = $c.goal else . end)
                   | del(.creates[$e.tuid])
@@ -402,8 +579,15 @@ function __ai_claude_task_lines --argument-names session_file max_line_chars max
               | (.tasks[$tid] // null) as $t
               | if $t then
                   (if $e.subject  then .tasks[$tid].subject = $e.subject  else . end)
-                  | (if $e.status then .tasks[$tid].status = $e.status else . end)
+                  | (if $e.status then
+                      (if $e.status == "completed" and (.tasks[$tid].status // "") != "completed" then
+                         .completion_seq += 1
+                         | .tasks[$tid].completion_seq = .completion_seq
+                       else . end)
+                      | .tasks[$tid].status = $e.status
+                    else . end)
                   | (if $e.parent != null then .tasks[$tid].parent = $e.parent else . end)
+                  | (if $e.backlogTask != null then .tasks[$tid].backlogTask = $e.backlogTask else . end)
                 else . end
             else . end
           )
@@ -417,21 +601,34 @@ function __ai_claude_task_lines --argument-names session_file max_line_chars max
             sub("^#[0-9?]+\\\\s+"; "")
             | sub("\\\\s*\\\\[#[0-9]+系\\\\]\\\\s*"; " ")
             | sub("^ +"; "")
-            | sub(" +$"; "");
-          (if $goal then ["goal\t" + ($goal | strip_claude_prefix)] else [] end)
+            | sub(" +$"; "")
+            | gsub("[\t\r\n]+"; " ");
+          def task_backlog($all):
+            if ((.backlogTask // "") != "") then .backlogTask
+            elif (((.parent // "") | tostring) != "" and ($all[((.parent // "") | tostring)] != null)) then
+              ($all[((.parent // "") | tostring)] | task_backlog($all))
+            else "" end;
+          ($order | map($tasks[.])) as $ordered_tasks
+          | ($ordered_tasks | map(. + {backlogTask: (. | task_backlog($tasks))})) as $with_backlog
+          | [] as $keep_completed
+          | (if $goal then ["regular\tgoal\t" + ($goal | strip_claude_prefix)] else [] end)
           + (
-              [$order[] | $tasks[.]]
+              $with_backlog
               | map(select(.status != "deleted"))
+              | map(. as $task | select($task.status != "completed" or ($keep_completed | index($task.completion_seq))))
               | . as $alive
-              | (map(select((.parent | tostring) == "")) | map(.id)) as $root_ids
+              | def same_backlog_parent($task):
+                  (($task.parent // "") | tostring) as $pid
+                  | ($pid != "" and (($alive[]? | select(.id == $pid) | .backlogTask) // "") == ($task.backlogTask // ""));
+              (map(select(((.parent | tostring) == "") or ((same_backlog_parent(.)) | not))) | map(.id)) as $root_ids
               | [
                   $root_ids[] as $rid
                   | ($alive[] | select(.id == $rid)) as $root
-                  | ($alive | map(select((.parent | tostring) == $rid))) as $children
-                  | "root\t" + $root.status + "\t" + $root.id + "\t" +
+                  | ($alive | map(select((.parent | tostring) == $rid and (.backlogTask // "") == ($root.backlogTask // "")))) as $children
+                  | (if (($root.backlogTask // "") != "") then "backlog\t" + $root.backlogTask else "regular" end) + "\troot\t" + $root.status + "\t" + $root.id + "\t" +
                     (($children | map(select(.status == "completed")) | length) | tostring) + "/" +
                     ($children | length | tostring) + "\t" + ($root.subject | strip_claude_prefix),
-                    ($children[] | "child\t" + .status + "\t" + .id + "\t" + (.subject | strip_claude_prefix))
+                    ($children[] | (if ((.backlogTask // "") != "") then "backlog\t" + .backlogTask else "regular" end) + "\tchild\t" + .status + "\t" + .id + "\t" + (.subject | strip_claude_prefix))
                 ]
             )
         | .[]
@@ -451,49 +648,25 @@ function __ai_claude_task_lines --argument-names session_file max_line_chars max
             break
         end
 
-        set -l parts (string split -m 4 \t -- "$line")
-        switch "$parts[1]"
-            case goal
-                printf '%s\n' (string shorten -m $max_line_chars -- "$parts[2]")
-            case root
-                set -l item_status $parts[2]
-                set -l count $parts[4]
-                set -l subject $parts[5]
-                set -l marker -
-                set -l color_start ""
-                set -l color_end ""
-                switch "$item_status"
-                    case completed
-                        set marker '✓'
-                    case in_progress
-                        # pane list の working 表示 (▶ + 緑) と統一
-                        set marker '▶'
-                        set color_start (set_color green)
-                        set color_end (set_color normal)
-                end
-                set -l shortened
-                if test "$count" = "0/0"
-                    set shortened (string shorten -m $max_line_chars -- (printf '%s %s' "$marker" "$subject"))
-                else
-                    set shortened (string shorten -m $max_line_chars -- (printf '%s %s %s' "$marker" "$count" "$subject"))
-                end
-                printf '%s%s%s\n' "$color_start" "$shortened" "$color_end"
-            case child
-                set -l item_status $parts[2]
-                set -l subject $parts[4]
-                set -l marker -
-                set -l color_start ""
-                set -l color_end ""
-                switch "$item_status"
-                    case completed
-                        set marker '✓'
-                    case in_progress
-                        set marker '▶'
-                        set color_start (set_color green)
-                        set color_end (set_color normal)
-                end
-                set -l shortened (string shorten -m $max_line_chars -- (printf '  %s %s' "$marker" "$subject"))
-                printf '%s%s%s\n' "$color_start" "$shortened" "$color_end"
+        set -l group regular
+        set -l task_id ""
+        set -l record "$line"
+        set -l parts (string split \t -- "$line")
+        if test "$parts[1]" = backlog
+            set group backlog
+            set task_id "$parts[2]"
+            set record (string join -- \t regular $parts[3..-1])
+        end
+        set -l display_line (__ai_format_claude_task_record "$record" "$max_line_chars")
+        if test -n "$display_line"
+            if test "$group" = backlog
+                printf 'backlog\t%s\t%s\n' "$task_id" "$display_line"
+            else if test "$parts[2]" = goal
+                # goal 行は特別扱いして Backlog.md セクション上に表示する。
+                printf 'goal\t%s\n' "$display_line"
+            else
+                printf 'regular\t%s\n' "$display_line"
+            end
         end
         set processed (math "$processed + 1")
         set remaining (math "$remaining - 1")
@@ -936,7 +1109,31 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
     # v51: blocked 状態 (承認プロンプトで停止) を追加。! 赤マーカー + Basso 通知。
     # v52: sub-agent 進捗行 (◯) を working 検出。Codex background terminal running の false positive 修正。
     # v53: worker pane (tmux-bridge role が設定済かつ controller でない) の全通知を抑制。
-    set -l state_version 54
+    # v58: Backlog.md task list 統合表示、metadata.backlogTask grouping、completed 直近 3 件化。
+    # v59: sidepane 3 バグ修正 — Backlog.md 見出しから URL 表示を撤去 (click target のみ)、
+    #      In Progress/To Do は 1 文字 marker (▶/○) に圧縮、completed 常時非表示で旧タスクノイズ排除。
+    # v60: Backlog.md 見出しに blue+underline を付けてハイパーリンクとして視認できる状態に。
+    # v61: 見出しに OSC 8 hyperlink を追加し terminal (Ghostty 等) からも直接 open 可能に。
+    # v62: nested backlog task の子行に string shorten を再適用して pane 幅超過による折り返しを排除。
+    # v63: nested child の shorten が末尾 ANSI reset を切り落とすと色が次行以降に漏れるので、
+    #      末尾に set_color normal を再付与して色漏れを止める。
+    # v64: nested child の indent を 2 → 4 space に増やして Backlog.md task 行より深い階層と分かるように。
+    # v65: string join に -- 区切りを追加し、$parts[3] が "-" で始まる時 (pending status marker) に
+    #      flag 解釈されるバグを修正。
+    # v66: backlog task list --plain の regex を priority label 省略可 + サブタスク ID (TASK-N.M) 対応に。
+    # v67: role 見出し ("lead" 等) を Section 6 から撤去 + TASK 行の左インデント短縮 (Backlog.md 見出しと同じ 1 space)。
+    # v68: Backlog.md 紐付け無しの Claude Code root task / goal 行を Backlog.md セクション後に回して、
+    #      Backlog.md セクション先頭の視認性を確保。
+    # v69: goal 行を Backlog.md セクションの上に戻す (現在の作業焦点として上位に置き、下部に孤立して見えないように)。
+    #      unlinked root task は引き続き Backlog.md セクションの下に置く。
+    # v70: Backlog.md 見出しの ▶ 装飾を撤去 (単に「Backlog.md」だけを表示、hyperlink は継続)。
+    # v71: Backlog.md 見出しの hyperlink 先に ?lane=milestone を付加して milestone lane を直接開く。
+    # v72: __ai_backlog_task_records の cache キーに backlog_url を含めて、SessionStart hook 反映後の URL 変化を検出。
+    # v73: sidepane から goal 行の表示を撤去 (Backlog.md セクションと重複するため)。unlinked root task は継続表示。
+    # v74: Backlog.md 見出し URL の源を pane option `@ai_backlog_url` から cwd 起点算出に変更。
+    #      pane option は 1 pane が別 project cwd を跨ぐと stale になる構造欠陥があり、
+    #      task tree は cwd 起点なのに URL だけ pane option 経由で不整合になる事例が発生していた。
+    set -l state_version 74
     while true
         # ===== Section 1: 初期化 (loop 毎の状態リセット) =====
         set -l lines
@@ -1410,10 +1607,87 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
                 if test "$max_task_lines" -lt 5
                     set max_task_lines 5
                 end
-                set -l task_lines (__ai_claude_task_lines "$active_claude_session_file" "$max_line_chars" "$max_task_lines")
+                # v74: pane option `@ai_backlog_url` の参照を撤去し、cwd 起点で URL を都度算出する。
+                # pane option は 1 pane が別 project cwd を跨いで開かれた際に stale になる構造欠陥があり、
+                # task tree は cwd 起点なのに URL だけ pane option 経由で不整合になる事例が発生していた。
+                set -l task_records (__ai_claude_task_lines "$active_claude_session_file" "$max_line_chars" "$max_task_lines")
+                set -l backlog_records (__ai_backlog_task_records "$active_claude_cwd" "$max_line_chars")
+                set -l task_lines
+                set -l unlinked_lines
+                set -l backlog_task_tree_records
+
+                for record in $task_records
+                    set -l parts (string split -m 2 \t -- "$record")
+                    test (count $parts) -ge 2; or continue
+                    if test "$parts[1]" = backlog; and test (count $parts) -ge 3
+                        # -- を付けて $parts[3] が "-" で始まる (例: pending 状態の "- title") ケースに備える。
+                        set -a backlog_task_tree_records (string join -- \t "$parts[2]" "$parts[3]")
+                    else if test "$parts[1]" = goal
+                        # goal 行は Backlog.md セクションと重複するノイズになりやすいため、
+                        # sidepane では表示しない (Claude Code の metadata.goal はステータスラインで見える)。
+                        continue
+                    else if test "$parts[1]" = regular
+                        # Backlog.md 紐付け無しの root task は Backlog.md セクションより後にまとめて出す。
+                        set -a unlinked_lines "$parts[2]"
+                    end
+                end
+
+                if test (count $backlog_records) -gt 0
+                    for record in $backlog_records
+                        set -l parts (string split -m 2 \t -- "$record")
+                        test (count $parts) -ge 2; or continue
+                        switch "$parts[1]"
+                            case header
+                                # 見出しはクリック可能なハイパーリンクとして視覚的に区別する
+                                # (OSC 8 hyperlink + blue + underline)。tmux 側は
+                                # allow-passthrough on + terminal-features hyperlinks で OSC 8 を素通しする
+                                # 前提。ハイパーリンク経路は terminal 自身 (Ghostty/iTerm2) が Cmd+click 等で開く。
+                                # tmux mouse click 経路も継続稼働 (line_targets 登録)。
+                                # sidepane 側で ?lane=milestone を付加して Backlog.md の milestone lane を
+                                # 直接開けるようにする (base URL 側は SessionStart hook が set)。
+                                if test (count $parts) -ge 3; and test -n "$parts[3]"
+                                    set -l base_url "$parts[3]"
+                                    set -l target_url
+                                    if string match -qr '\?' -- "$base_url"
+                                        set target_url "$base_url&lane=milestone"
+                                    else
+                                        set target_url "$base_url"'?lane=milestone'
+                                    end
+                                    set -l osc_open (printf '\e]8;;%s\e\\' "$target_url")
+                                    set -l osc_close (printf '\e]8;;\e\\')
+                                    set -a task_lines "$osc_open"(set_color -u blue)"$parts[2]"(set_color normal)"$osc_close"
+                                    set -a line_texts " "$parts[2]
+                                    set -a line_targets "url:$target_url"
+                                else
+                                    set -a task_lines "$parts[2]"
+                                end
+                            case task
+                                test (count $parts) -ge 3; or continue
+                                set -l backlog_task_id "$parts[2]"
+                                set -a task_lines "$parts[3]"
+                                for task_record in $backlog_task_tree_records
+                                    set -l task_parts (string split -m 1 \t -- "$task_record")
+                                    test (count $task_parts) -ge 2; or continue
+                                    if test "$task_parts[1]" = "$backlog_task_id"
+                                        # nesting indent を Backlog.md TASK-N 行 (indent 1) より 2 段深くして
+                                        # 「TASK-N の下にネストされている」ことを視覚的に示す (total 3 space with detail_lines prefix)。
+                                        # 末尾に set_color normal を再付与して、shorten が末尾 ANSI reset を
+                                        # 切り落とした場合の色の漏れ (次行以降が緑のまま表示される) を防ぐ。
+                                        set -l shortened_child (string shorten -m $max_line_chars -- "  $task_parts[2]")
+                                        set -a task_lines "$shortened_child"(set_color normal)
+                                    end
+                                end
+                        end
+                    end
+                end
+
+                # Backlog.md 紐付け無しの unlinked_lines は Backlog.md セクションより後に出す。
+                # Backlog.md セクション有無に関わらず、両者を連結して 1 セクションに出力する。
+                set -a task_lines $unlinked_lines
                 if test (count $task_lines) -gt 0
                     set -a lines ""
-                    set -a lines (__ai_sidebar_detail_lines "$active_claude_display" "$max_line_chars" $task_lines)
+                    # active_claude_display (「lead」等の role 表示) は Backlog.md セクションでは冗長なので空にして header 行を出さない。
+                    set -a lines (__ai_sidebar_detail_lines "" "$max_line_chars" $task_lines)
                 end
             end
         end
