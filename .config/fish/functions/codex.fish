@@ -79,10 +79,14 @@ function __codex_run
     return $exit_code
 end
 
+# agent-hub shim は前景が node になり herdr の agent 検出が外れる。
+# 既定は素の codex。明示時のみ wrap: AGENT_HUB_FORCE_WRAP=1 codex
 function __codex_should_bypass_agent_hub
     set -q AGENT_HUB_AUTO_WRAP_ACTIVE; and return 0
     set -q AGENT_HUB_AUTO_WRAP_BYPASS; and return 0
-    return 1
+    set -q AGENT_HUB_FORCE_WRAP; and return 1
+    # 既定: shim なし（herdr 検出 / 通常起動）
+    return 0
 end
 
 function __codex_run_agent_hub_interactive
