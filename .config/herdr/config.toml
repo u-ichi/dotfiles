@@ -1,0 +1,46 @@
+# herdr 設定 (default は `herdr --default-config` で確認可能)
+# 現行 tmux (.config/tmux/tmux.conf) の操作感を再現する。
+# 変更したい項目だけをここに書く。default と一致する項目はコメントアウトのまま残さない。
+
+[keys]
+# prefix を tmux と揃える
+prefix = "ctrl+a"
+
+# tmux prefix+r → reload。default では prefix+r が resize_mode なので resize は Shift+R に逃す
+reload_config = "prefix+r"
+resize_mode = "prefix+shift+r"
+
+# tmux prefix+h → 上下分割、prefix+v → 左右分割
+# herdr の split_horizontal / split_vertical は「分割線」ベースの命名 (推定):
+#   split_horizontal = 水平の分割線 = 上下分割
+#   split_vertical   = 垂直の分割線 = 左右分割
+# 起動後に上下と左右が逆なら本ファイルで h と v の割当をスワップする
+split_horizontal = "prefix+h"
+split_vertical = "prefix+v"
+
+# tmux prefix+= → kill pane
+close_pane = "prefix+equal"
+
+# tmux prefix+space → choose-window (herdr の tab picker)
+goto = "prefix+space"
+
+# tmux prefix+y → copy-mode (herdr は scrollback を editor で開く挙動が近い)
+edit_scrollback = "prefix+y"
+
+# tmux 側の pane 移動 (Ctrl+Shift+矢印, direct binding, prefix なし) をそのまま再現。
+# default の prefix+h/j/k/l は split_horizontal と衝突するので direct に振り替える。
+focus_pane_left = "ctrl+shift+left"
+focus_pane_down = "ctrl+shift+down"
+focus_pane_up = "ctrl+shift+up"
+focus_pane_right = "ctrl+shift+right"
+
+# tmux 側の C-M-1..9 (Cmd+数字 = Ghostty CSI-u 経由の ctrl+alt+n) で tab を直接切替
+[keys.indexed]
+tabs = "ctrl+alt"
+
+[experimental]
+# Claude Code TUI への画像貼付 (Cmd+V / Ctrl+V で clipboard の画像) を通すために有効化。
+# default (false) だと Ghostty + herdr + Claude Code 環境で clipboard 画像を貼っても
+# [Image #N] プレースホルダーが付かず無反応になる。名前は kitty_graphics だが
+# 実体として image-paste passthrough を含む (herdr issue #195 / #205 参照)。
+kitty_graphics = true
