@@ -182,10 +182,8 @@ working/idle は footer/recap 行 (`capture-pane`) を唯一の源にする:
 - **active turn (処理中)**: spinner 行 `✻ … (12m 38s · ↑ 34.3k tokens)` のように
   **括弧付き live elapsed**、または `esc to interrupt` → working。idle 完了行
   `Brewed for 23m 14s · …` は括弧が無いので区別できる。
-- **background shell**: `N shell … still running` / `· N shell …·` が 1 本でも
-  あれば working (run_in_background Bash 等の実作業)。
-- **monitor**: sidebar 等の常駐分が走ることがあるため、
-  `N monitor` が **2 本以上のときだけ** working。1 本だけなら idle。
+- **background shell / monitor**: 本数は working 判定に使わない (v75 で撤廃)。
+  常駐 watcher と実作業を footer の count だけでは区別できないため。
 - **sub-agent (Agent tool)**: footer の agent 進捗行
   `◯ <name> ... Nm Ns · ↓ Nk tokens` が 1 本でもあれば working。
   active turn の括弧付き elapsed が消えた後も agent が動き続ける状態を捕捉する。
@@ -195,11 +193,10 @@ caller の title-braille fallback (`^[⠀-⣿]` → working) は **Claude consol
 
 ### 症状別の見方
 
-- 「完了したのに ▶ のまま」→ footer の monitor 数を確認。常駐 1 本だけなら idle が
-  正。▶ のままなら title-braille fallback が効いていないか (= live writer が旧版を
-  抱えていないか、罠 4) を疑う。
-- 「shell が動いてるのに ■」→ footer に `N shell still running` が出ているか確認。
-  shell 検出漏れ。
+- 「完了したのに ▶ のまま」→ v75 以降は常駐 watcher の shell/monitor count では
+  working にしない。▶ のままなら live writer が旧版を抱えていないか確認 (罠 4)。
+- 「shell が動いてるのに ■」→ v75 以降は background shell の本数だけでは working に
+  しない。active turn シグナルが無いなら ■ は想定内。
 - 「sub-agent が動いてるのに ■」→ capture-pane 末尾に `◯ ... · ↓` 行があるか確認。
   なければ pane height が小さく footer がスクロールアウトした可能性。
   あるのに ■ なら writer が旧版 (v51 以前) を抱えていないか確認 (罠 4)。

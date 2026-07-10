@@ -784,30 +784,10 @@ function __ai_claude_signal_line_state --argument-names line
         return 0
     end
 
-    # Claude Code は prompt が戻っていても background の shell / monitor が動き続ける
-    # ことがある。recap / status 行の "N shell, M monitor still running" や
-    # "N shell, M monitor ·" を解析し、実作業が走っていれば processing として出す。
-    #   - background shell (run_in_background Bash 等の実作業) が 1 本でもあれば working。
-    #   - monitor は sidebar 等の常駐分が走ることがあるため、
-    #     2 本以上の時だけ working とする。1 本だけなら idle。
-    set -l is_runline 0
-    if string match -qr 'still running' -- "$line"
-        set is_runline 1
-    else if string match -qr '[·|] [0-9]+ (shells?|monitors?)(, [0-9]+ (shells?|monitors?))? [·|]' -- "$line"
-        set is_runline 1
-    end
-    if test "$is_runline" = 1
-        set -l shell_count (string match -rg '([0-9]+) shells?' -- "$line")
-        set -l monitor_count (string match -rg '([0-9]+) monitors?' -- "$line")
-        if test -n "$shell_count[1]"; and test "$shell_count[1]" -ge 1
-            printf '%s\n' working
-            return 0
-        end
-        if test -n "$monitor_count[1]"; and test "$monitor_count[1]" -ge 2
-            printf '%s\n' working
-            return 0
-        end
-    end
+    # v75: run-line の shell/monitor count 判定は撤廃した。常駐 watcher
+    # (agmsg / preview 監視) と実作業の区別が本数から不能で、誤 working
+    # 固着と完了通知欠落を招くため。working シグナルは active spinner /
+    # esc to interrupt / sub-agent 進捗行に限定する。
 
     # sub-agent (Agent tool) 実行中、footer に agent 進捗行が表示される:
     #   ◯ explore-judge-prompt  Examining...    2m 41s · ↓ 63.8k tokens
@@ -1133,7 +1113,8 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
     # v74: Backlog.md 見出し URL の源を pane option `@ai_backlog_url` から cwd 起点算出に変更。
     #      pane option は 1 pane が別 project cwd を跨ぐと stale になる構造欠陥があり、
     #      task tree は cwd 起点なのに URL だけ pane option 経由で不整合になる事例が発生していた。
-    set -l state_version 74
+    # v75: Claude の run-line shell/monitor count 判定を撤廃 (v46/v47 の巻き戻し)。常駐 watcher と実作業を区別できず誤 working 固着を招くため、working は active turn シグナルのみに限定。
+    set -l state_version 75
     while true
         # ===== Section 1: 初期化 (loop 毎の状態リセット) =====
         set -l lines
@@ -1344,8 +1325,9 @@ function ai-panes-sidebar --description 'Show AI CLI panes in a tmux sidebar'
             else if string match -qr '^[⠀-⣿]' -- $title; and test "$is_claude_console" != 1
                 # title の braille スピナーは Claude では idle 中も background monitor で
                 # animate するため当てにならない。Claude の working/idle は capture-pane
-                # (__ai_claude_visible_state: active spinner / shell / monitor>=2) を唯一の
-                # 源にし、ここでは Claude を対象外にする。Codex 等は従来どおり title で補う。
+                # (__ai_claude_visible_state: active spinner / esc to interrupt /
+                # sub-agent 進捗行) を唯一の源にし、ここでは Claude を対象外にする。
+                # Codex 等は従来どおり title で補う。
                 set detected_state working
             end
 
