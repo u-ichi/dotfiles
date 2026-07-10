@@ -41,6 +41,14 @@ focus_pane_right = "ctrl+shift+right"
 next_workspace = "ctrl+tab"
 previous_workspace = "ctrl+shift+tab"
 
+# Codex などの TUI が表示幅で入れた改行を、貼り付け前に clipboard 上で除去する。
+# herdr でドラッグ選択した直後に prefix+Shift+Y を押してから貼り付ける。
+[[keys.command]]
+key = "prefix+shift+y"
+type = "shell"
+command = "python3 \"$HOME/.config/herdr/reflow_clipboard.py\""
+description = "clipboard の表示折り返しを除去"
+
 # 数字キーによる直接切替:
 #   Ctrl+1..9      → tab 切替  (Ghostty 側で csi:<code>;5u を送出)
 #   Cmd+1..9       → workspace 切替  (Ghostty 側で csi:<code>;7u = Ctrl+Alt+N を送出)
