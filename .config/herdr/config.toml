@@ -18,8 +18,8 @@ resize_mode = "prefix+shift+r"
 split_horizontal = "prefix+h"
 split_vertical = "prefix+v"
 
-# tmux prefix+= → kill pane
-close_pane = "prefix+equal"
+# tmux prefix+- → kill pane。herdr は `=` の key 名を持たないので minus に統一
+close_pane = "prefix+minus"
 
 # tmux prefix+space → choose-window (herdr の tab picker)
 goto = "prefix+space"
@@ -34,9 +34,20 @@ focus_pane_down = "ctrl+shift+down"
 focus_pane_up = "ctrl+shift+up"
 focus_pane_right = "ctrl+shift+right"
 
-# tmux 側の C-M-1..9 (Cmd+数字 = Ghostty CSI-u 経由の ctrl+alt+n) で tab を直接切替
+# workspace (spaces) 切替。Chrome/エディタ的な操作感で Ctrl+Tab で下 (next),
+# Ctrl+Shift+Tab で上 (previous)。default では両方 unset なので明示 bind。
+# 前提: Ghostty 側で ctrl+tab=csi:9;5u / ctrl+shift+tab=csi:9;6u に上書き済みで、
+# CSI-u 経由で herdr へ届く。届かない場合は Ghostty 側の keybind を見直す。
+next_workspace = "ctrl+tab"
+previous_workspace = "ctrl+shift+tab"
+
+# 数字キーによる直接切替:
+#   Ctrl+1..9      → tab 切替  (Ghostty 側で csi:<code>;5u を送出)
+#   Cmd+1..9       → workspace 切替  (Ghostty 側で csi:<code>;7u = Ctrl+Alt+N を送出)
+# tabs / workspaces は modifier だけ書く。値が "ctrl" なら ctrl+1..9 が tab 切替になる。
 [keys.indexed]
-tabs = "ctrl+alt"
+tabs = "ctrl"
+workspaces = "ctrl+alt"
 
 [experimental]
 # Claude Code TUI への画像貼付 (Cmd+V / Ctrl+V で clipboard の画像) を通すために有効化。

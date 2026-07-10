@@ -45,9 +45,10 @@ keybind = cmd+down=csi:1;6B
 keybind = cmd+left=csi:1;6D
 keybind = cmd+right=csi:1;6C
 
-# === ウィンドウ切替（Cmd+数字）→ 内側の tmux に委譲 ===
-# Ghostty の Cmd+数字を tmux へ直接渡すため、衝突しにくい Ctrl+Alt+数字
-# (CSI-u modifier 7) の形で送出する。tmux 側では C-M-1..9 に割当てる。
+# === workspace 切替 (Cmd+数字) → 内側の herdr に委譲 ===
+# Ghostty の Cmd+数字を herdr へ直接渡すため、衝突しにくい Ctrl+Alt+数字
+# (CSI-u modifier 7) の形で送出する。herdr 側では [keys.indexed] workspaces = "ctrl+alt"
+# で受けて workspace 切替に割り当てる。
 # 物理数字キーは digit_N としても解決されるため、既定の goto_tab を両方上書きする。
 #   \e[49;7u = Ctrl+Alt+1 (49 = "1", modifier 7 = Ctrl+Alt)
 keybind = cmd+digit_1=csi:49;7u
@@ -68,6 +69,29 @@ keybind = cmd+digit_8=csi:56;7u
 keybind = cmd+8=csi:56;7u
 keybind = cmd+digit_9=csi:57;7u
 keybind = cmd+9=csi:57;7u
+
+# === tab 切替 (Ctrl+数字) → 内側の herdr に委譲 ===
+# 既定では Ctrl+数字は raw では意味を持たず inner に届かないため、CSI-u (kitty)
+# 形式で明示送出する。herdr 側では [keys.indexed] tabs = "ctrl" で受ける。
+#   \e[49;5u = Ctrl+1 (49 = "1", modifier 5 = Ctrl)
+keybind = ctrl+digit_1=csi:49;5u
+keybind = ctrl+1=csi:49;5u
+keybind = ctrl+digit_2=csi:50;5u
+keybind = ctrl+2=csi:50;5u
+keybind = ctrl+digit_3=csi:51;5u
+keybind = ctrl+3=csi:51;5u
+keybind = ctrl+digit_4=csi:52;5u
+keybind = ctrl+4=csi:52;5u
+keybind = ctrl+digit_5=csi:53;5u
+keybind = ctrl+5=csi:53;5u
+keybind = ctrl+digit_6=csi:54;5u
+keybind = ctrl+6=csi:54;5u
+keybind = ctrl+digit_7=csi:55;5u
+keybind = ctrl+7=csi:55;5u
+keybind = ctrl+digit_8=csi:56;5u
+keybind = ctrl+8=csi:56;5u
+keybind = ctrl+digit_9=csi:57;5u
+keybind = ctrl+9=csi:57;5u
 
 # === スプリット作成 ===
 keybind = ctrl+s>v=new_split:right
@@ -97,6 +121,14 @@ desktop-notifications = true
 # Ghostty タブは super+shift+[ / ] で操作可能。
 keybind = ctrl+tab=csi:9;5u
 keybind = ctrl+shift+tab=csi:9;6u
+
+# === Shift+Enter を CSI-u で送出 (Claude/Codex TUI の改行) ===
+# 既定では shift+enter は素の \r としか送られず、間の herdr/tmux で shift 情報が
+# 失われて Claude Code では通常 Enter (送信) として解釈される。CSI-u encoding で
+# 明示送出することで内側の herdr (kitty keyboard) / tmux (extended-keys always) を
+# 貫通して Claude Code / Codex CLI に届く。
+#   \e[13;2u = Shift+Enter (keycode 13=Enter, modifier 2=Shift)
+keybind = shift+enter=csi:13;2u
 
 # === 設定リロード ===
 keybind = cmd+shift+comma=reload_config

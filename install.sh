@@ -43,6 +43,25 @@ sync_homebrew() {
 
   echo "--- Homebrew ---"
   brew update
+  # 個人 tap (u-ichi/tap) を trust リストに登録する。
+  # `HOMEBREW_REQUIRE_TAP_TRUST` が有効な環境では未 trust の cask が
+  # `brew bundle` 実行時に Error を吐いて処理全体を中断するため。
+  # `brew trust` は idempotent (既に trusted なら何もしない)。
+  brew trust --tap u-ichi/tap 2>/dev/null || true
+
+  # sudo 必須 cask (docker-desktop / session-manager-plugin) の pre-flight は
+  # brew bundle 実行中に sudo password prompt を出す。non-interactive shell
+  # (agent 経由・CI 等) では tty が無く落ちるため、tty ありかつ outdated に
+  # 該当 cask が含まれる時だけ先取りで credential cache を作る (5 分有効)。
+  if [ -t 0 ] && [ -t 1 ]; then
+    local outdated
+    outdated="$(brew outdated --cask --quiet 2>/dev/null || true)"
+    if echo "$outdated" | grep -Eq '^(docker-desktop|session-manager-plugin)$'; then
+      echo "sudo 認証を先取り (docker-desktop / session-manager-plugin 更新のため)"
+      sudo -v
+    fi
+  fi
+
   brew bundle --file="$SCRIPT_DIR/Brewfile"
   brew cleanup
   echo ""
@@ -294,6 +313,23 @@ else
   echo "インストール: Claude Code"
   tmpfile="$(mktemp)"
   curl -fsSL https://claude.ai/install.sh -o "$tmpfile"
+  echo "ダウンロード完了: $tmpfile"
+  bash "$tmpfile"
+  rm -f "$tmpfile"
+fi
+
+# === Grok Build CLI (xAI のコーディングエージェント、ネイティブインストーラー) ===
+# Homebrew formula が無いため公式 install.sh を使う。バイナリは ~/.grok/bin/ に配置され、
+# ~/.local/bin/grok に symlink される (~/.local/bin は既に fish PATH に含まれる)。
+# installer は zsh の PATH も自動追記する。初回 `grok` 起動時にブラウザ認証、
+# 非対話環境では XAI_API_KEY 環境変数で API key を渡す。
+echo "--- Grok Build ---"
+if command -v grok &>/dev/null; then
+  echo "済み:     grok ($(grok --version 2>/dev/null || echo '不明'))"
+else
+  echo "インストール: Grok Build"
+  tmpfile="$(mktemp)"
+  curl -fsSL https://x.ai/cli/install.sh -o "$tmpfile"
   echo "ダウンロード完了: $tmpfile"
   bash "$tmpfile"
   rm -f "$tmpfile"
