@@ -132,3 +132,11 @@ keybind = shift+enter=csi:13;2u
 
 # === 設定リロード ===
 keybind = cmd+shift+comma=reload_config
+
+# === TUI (Grok 等) 中のテキストコピー ===
+# mouse reporting 中は通常ドラッグがアプリに吸われる。Shift+ドラッグで端末選択し、
+# 離した瞬間に system clipboard へ入れる（⌘C 不要）。
+# 検証済み: Grok CLI + Ghostty でセッションログコピー可。
+copy-on-select = clipboard
+clipboard-trim-trailing-spaces = true
+clipboard-write = allow
