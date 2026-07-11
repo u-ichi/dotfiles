@@ -2,7 +2,7 @@
 name: pkg-add
 description: >
   パッケージやツールのインストール依頼を受けて、このリポジトリの管理ファイルに追加し
-  update.sh で適用する。直接インストールは行わず、必ずコード管理を経由する。
+  install.sh で適用する。直接インストールは行わず、必ずコード管理を経由する。
   TRIGGER when: ユーザーが「〇〇をインストールして」「〇〇を追加して」
   「〇〇入れて」「brew install 〇〇」「npm install -g 〇〇」
   「fisher install 〇〇」と依頼した時。
@@ -13,23 +13,24 @@ allowed-tools: Bash(brew *) Bash(npm *) Bash(fisher *) Bash(fish *) Bash(bash *)
 
 # Package Add スキル
 
-パッケージやツールを**このリポジトリの管理ファイルに追加**し、update.sh で適用する。
+パッケージやツールを**このリポジトリの管理ファイルに追加**し、install.sh で適用する。
 
 ## 大原則
 
 **直接インストールしない。** `brew install` / `npm install -g` / `fisher install` を
-直接実行するのではなく、必ず対応する管理ファイルに追記してから update.sh で適用する。
+直接実行するのではなく、必ず対応する管理ファイルに追記してから install.sh で適用する。
 これにより環境の再現性を保証する。
 
 ## パッケージ種別と管理ファイル
 
 | 種別 | 管理ファイル | 形式 | 適用方法 |
 |------|------------|------|---------|
-| Homebrew CLI | `Brewfile` | `brew '<name>'` | `update.sh` → `brew bundle` |
-| Homebrew cask (GUI) | `Brewfile` | `cask '<name>'` | `update.sh` → `brew bundle` |
-| Homebrew cask (フォント) | `Brewfile` | `cask 'font-<name>'` | `update.sh` → `brew bundle` |
-| Homebrew 非公式 cask (個人 tap) | `projects/homebrew-tap/Casks/<name>.rb` + `Brewfile` | Cask Ruby DSL + `cask 'u-ichi/tap/<name>'` | tap に push → `update.sh` → `brew bundle` |
-| npm グローバル | `Npmfile` | 1行1パッケージ名 | `update.sh` → `npm install -g` |
+| Homebrew CLI | `Brewfile` | `brew '<name>'` | `install.sh` → `brew bundle` |
+| Homebrew cask (GUI) | `Brewfile` | `cask '<name>'` | `install.sh` → `brew bundle` |
+| Homebrew cask (フォント) | `Brewfile` | `cask 'font-<name>'` | `install.sh` → `brew bundle` |
+| Homebrew 非公式 cask (個人 tap) | `projects/homebrew-tap/Casks/<name>.rb` + `Brewfile` | Cask Ruby DSL + `cask 'u-ichi/tap/<name>'` | tap に push → `install.sh` → `brew bundle` |
+| npm グローバル | `Npmfile` | 1行1パッケージ名 | `install.sh` → `npm install -g` |
+| git ソースビルド (Backlog.md 専用) | `lib/backlog.sh` | `ensure_backlog_head` 関数 | `install.sh backlog` で適用 |
 | Fisher プラグイン | `.config/fish/fish_plugins` | 1行1リポジトリパス | `fisher install` 後に自動更新 |
 
 ### 種別の判定基準
@@ -44,6 +45,9 @@ allowed-tools: Bash(brew *) Bash(npm *) Bash(fisher *) Bash(fish *) Bash(bash *)
    - Node.js ツールなら → npm グローバル
    - Fish プラグインなら → Fisher
    - 判断できない場合 → ユーザーに確認する
+
+Backlog.md は Node.js ツールだが npm 経路に戻さず、main HEAD を追従するため
+`lib/backlog.sh` と MODE `backlog` を使う。
 
 ## 手順
 
@@ -118,7 +122,7 @@ Edit ツールで管理ファイルにパッケージを追加する。
 #### Homebrew / npm の場合
 
 ```bash
-bash <dotfiles ディレクトリ>/update.sh
+bash <dotfiles ディレクトリ>/install.sh
 ```
 
 #### Fisher プラグインの場合
@@ -232,7 +236,7 @@ git -C "<projects base>/homebrew-tap" push
 # Edit で `cask 'u-ichi/tap/<name>'` を追記
 
 # 適用
-bash <dotfiles ディレクトリ>/update.sh
+bash <dotfiles ディレクトリ>/install.sh
 ```
 
 #### N5. bundle ID を実測して zap を追記
@@ -280,14 +284,14 @@ git -C "<projects base>/homebrew-tap" push
 上記以外のパッケージマネージャ（pip, cargo, go install 等）が必要になった場合:
 
 1. 管理ファイルの形式を決める（例: `Pipfile.global`, `Cargofile` 等）
-2. `update.sh` にインストールセクションを追加する
+2. `install.sh` にインストールセクションを追加する
 3. このスキルの「パッケージ種別と管理ファイル」テーブルを更新する
 4. 上記の変更をユーザーに提案し、承認を得てから実施する
 
-**直接インストールで済ませない。** 管理ファイル + update.sh のパターンを維持する。
+**直接インストールで済ませない。** 管理ファイル + install.sh のパターンを維持する。
 
 ## エラー時の対応
 
 - **パッケージが見つからない**: `brew search` / `npm search` で候補を検索して提示する
-- **update.sh が失敗**: エラー出力を表示してユーザーに報告する
+- **install.sh が失敗**: エラー出力を表示してユーザーに報告する
 - **PATH の問題**: Fish の場合 `config.fish` への `fish_add_path` 追記が必要な場合がある。その場合は `.config/fish/config.fish` を編集する（直接ではなくリポジトリ内のファイルを編集する）

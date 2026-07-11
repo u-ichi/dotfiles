@@ -4,5 +4,3 @@
 @colbymchenry/codegraph-darwin-arm64
 # Codex の headless browser 検証で使う Playwright CLI
 playwright
-# Markdown ネイティブのタスク管理 + Kanban CLI (base repo / 一部プロジェクトで使用)
-backlog.md

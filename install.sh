@@ -15,6 +15,7 @@ source "$SCRIPT_DIR/lib/gws.sh"
 source "$SCRIPT_DIR/lib/python.sh"
 source "$SCRIPT_DIR/lib/playwright.sh"
 source "$SCRIPT_DIR/lib/maintenance.sh"
+source "$SCRIPT_DIR/lib/backlog.sh"
 
 MODE="${1:-all}"
 
@@ -182,6 +183,12 @@ if [ "$MODE" = "npm" ]; then
   exit 0
 fi
 
+if [ "$MODE" = "backlog" ]; then
+  ensure_backlog_head
+  echo "完了しました"
+  exit 0
+fi
+
 if [ "$MODE" = "playwright" ]; then
   update_npm_globals
   ensure_playwright_chromium
@@ -223,7 +230,7 @@ fi
 
 if [ "$MODE" != "all" ]; then
   echo "エラー: 未知の MODE です: $MODE"
-  echo "利用可能: all, hermes, gws, python, npm, playwright, fish, karabiner, docker, maintenance"
+  echo "利用可能: all, hermes, gws, python, npm, backlog, playwright, fish, karabiner, docker, maintenance"
   exit 1
 fi
 
@@ -341,6 +348,9 @@ echo ""
 # === npm グローバルパッケージ ===
 update_npm_globals
 ensure_playwright_chromium
+
+# === Backlog.md ===
+ensure_backlog_head
 
 # === Python automation packages ===
 ensure_python_tools
