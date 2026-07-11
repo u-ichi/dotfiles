@@ -2,6 +2,11 @@
 # 現行 tmux (.config/tmux/tmux.conf) の操作感を再現する。
 # 変更したい項目だけをここに書く。default と一致する項目はコメントアウトのまま残さない。
 
+# 初回起動時の onboarding (tutorial) 画面をスキップ。default は true。
+# herdr 側が初回完了後に自動で false に書き換えるので、明示的に false 固定にして
+# 別マシンへ dotfiles 展開した直後の初回起動でも tutorial に入らないようにする。
+onboarding = false
+
 [keys]
 # prefix を tmux と揃える
 prefix = "ctrl+a"
@@ -9,6 +14,15 @@ prefix = "ctrl+a"
 # tmux prefix+r → reload。default では prefix+r が resize_mode なので resize は Shift+R に逃す
 reload_config = "prefix+r"
 resize_mode = "prefix+shift+r"
+
+# workspace 名を prefix+, で編集 (default の prefix+shift+w も別途残っている)。
+# tmux/kakoune の「, で rename」感覚に合わせる。
+rename_workspace = "prefix+comma"
+
+# workspace 新規作成を prefix+c に。default では prefix+c が new_tab なので
+# new_tab を prefix+t に退避。tmux の new-window に近い c を workspace 側に譲る。
+new_workspace = "prefix+c"
+new_tab = "prefix+t"
 
 # tmux prefix+h → 上下分割、prefix+v → 左右分割
 # herdr の split_horizontal / split_vertical は「分割線」ベースの命名 (推定):
@@ -63,3 +77,23 @@ workspaces = "ctrl+alt"
 # [Image #N] プレースホルダーが付かず無反応になる。名前は kitty_graphics だが
 # 実体として image-paste passthrough を含む (herdr issue #195 / #205 参照)。
 kitty_graphics = true
+
+# サーバー再起動 (herdr server restart / 再ログイン) を跨いで pane の scrollback を復元。
+# default は false。落とすと再起動後に pane が空白から始まる。
+pane_history = true
+
+[ui]
+# 分割 pane の border に検出済み agent 名 (Claude Code / Codex 等) を表示。
+# default は false。手動 pane label が設定されていない pane にのみ効く。
+show_agent_labels_on_pane_borders = true
+# agent panel の並び順。"spaces" は workspace ごとにグルーピング (default)、
+# "priority" は blocked → done → working → idle → unknown の順。
+# default 値と同一だが、default 変更に備えて明示。
+agent_panel_sort = "spaces"
+
+[ui.toast]
+# バックグラウンド workspace の通知 (agent done / blocked 等) を herdr TUI 内の
+# トーストに出す。default "off" は通知非表示。"terminal" / "system" は外側
+# terminal / OS 側の通知。"herdr" はトーストクリック or keys.open_notification_target
+# で該当 pane にジャンプできる。
+delivery = "herdr"
