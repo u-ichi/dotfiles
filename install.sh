@@ -49,19 +49,6 @@ sync_homebrew() {
   # `brew trust` は idempotent (既に trusted なら何もしない)。
   brew trust --tap u-ichi/tap 2>/dev/null || true
 
-  # sudo 必須 cask (docker-desktop / session-manager-plugin) の pre-flight は
-  # brew bundle 実行中に sudo password prompt を出す。non-interactive shell
-  # (agent 経由・CI 等) では tty が無く落ちるため、tty ありかつ outdated に
-  # 該当 cask が含まれる時だけ先取りで credential cache を作る (5 分有効)。
-  if [ -t 0 ] && [ -t 1 ]; then
-    local outdated
-    outdated="$(brew outdated --cask --quiet 2>/dev/null || true)"
-    if echo "$outdated" | grep -Eq '^(docker-desktop|session-manager-plugin)$'; then
-      echo "sudo 認証を先取り (docker-desktop / session-manager-plugin 更新のため)"
-      sudo -v
-    fi
-  fi
-
   brew bundle --file="$SCRIPT_DIR/Brewfile"
   brew cleanup
   echo ""
