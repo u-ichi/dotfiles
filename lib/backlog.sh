@@ -89,7 +89,9 @@ ensure_backlog_head() (
   fi
   src_dir_real="$(cd "$src_dir" && pwd -P)"
   repo_root_real="$(git -C "$src_dir" rev-parse --show-toplevel 2>/dev/null || true)"
-  repo_root_real="$(cd "$repo_root_real" 2>/dev/null && pwd -P || true)"
+  if ! repo_root_real="$(cd "$repo_root_real" 2>/dev/null && pwd -P)"; then
+    repo_root_real=""
+  fi
   if [ "$src_dir_real" != "$repo_root_real" ]; then
     echo "エラー: Backlog.md の管理先はリポジトリの先頭ディレクトリを指定してください: $src_dir"
     return 1
