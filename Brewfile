@@ -6,7 +6,6 @@ cask_args appdir: "/Applications"
 tap 'u-ichi/tap'
 tap 'manaflow-ai/cmux'
 tap 'terraform-linters/tap'
-tap 'UniClipboard/tap'
 
 # === CLI: クラウド・インフラ ===
 brew 'awscli'
@@ -112,9 +111,6 @@ cask 'karabiner-elements'
 # システム設定 > プライバシーとセキュリティで「このまま開く」が必要
 cask 'u-ichi/tap/pingplace'
 cask 'tailscale-app'
-# 端末間クリップボード同期 (画像対応)。LAN-only Mode + telemetry OFF で tailnet 内 P2P (iroh)
-# のみに限定し、クリップボード本文を外部に出さない運用にすること。
-cask 'UniClipboard/tap/uniclipboard'
 
 # === GUI: その他 ===
 cask 'bambu-studio'
