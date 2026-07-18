@@ -1,0 +1,4 @@
+# reviewr 固有設定。Herdr 本体の config.toml とは別に管理する。
+# 新規 worktree では自動表示せず、prefix+Shift+V の手動操作で開く。
+auto_open = false
+default_scope = "uncommitted"

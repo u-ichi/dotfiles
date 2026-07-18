@@ -53,7 +53,8 @@ brew 'zig@0.15'
 brew 'blueutil'
 brew 'glow'
 brew 'gtop'
-brew 'herdr'
+# herdr は公式 installer 管理 (install.sh 参照)。Homebrew formula は
+# `herdr update --handoff` (live handoff 更新) の対象外のため brew では入れない。
 brew 'htop'
 brew 'ollama'
 brew 'pstree'

@@ -10,16 +10,19 @@
 ├── install.sh                  # 初回セットアップ / 日常更新 (Brewfile + 設定ファイルコピー + brew/npm 更新)
 ├── lint.sh                     # ShellCheck / fish / taplo / json チェック
 ├── copy.conf                   # コピー定義 (ソース → コピー先の宣言)
+├── Herdrfile                   # Herdr plugin の source / version / commit 固定一覧
 ├── scripts/
 │   ├── check-tmux-safety.sh    #   default tmux server を落とす unsafe command の検出
 │   ├── cleanup-local-disk.sh   #   再生成可能なローカル開発データの整理
 │   ├── daily-maintenance.sh    #   install.sh + cleanup + Slack 要約の日次実行
-│   └── docker-disk-maintenance.sh # Docker Desktop の容量監視と安全側 prune
+│   ├── docker-disk-maintenance.sh # Docker Desktop の容量監視と安全側 prune
+│   └── test-herdr-plugin-sync.sh # Herdr plugin 同期の standalone 検証
 ├── lib/
 │   ├── copy.sh                 #   設定ファイルコピー関数 (copy.conf を読み込む)
 │   ├── docker.sh               #   Docker Desktop 自動起動とディスク保守 LaunchAgent の適用
 │   ├── defaults.sh             #   macOS defaults の適用
 │   ├── aws.sh                  #   AWS config を config.d パターンで組み立て
+│   ├── herdr.sh                #   Herdr 本体確認と plugin 同期
 │   ├── hermes.sh               #   Hermes Agent (x_search) の明示導入補助
 │   ├── gws.sh                  #   Google Workspace CLI (gws) の明示導入・更新補助
 │   ├── python.sh               #   uv ベースの Python automation tools (Pythonfile) 同期
@@ -46,6 +49,7 @@
 │   ├── tmux/test-ai-sidebars-isolated.sh # 専用 socket 上の tmux AI sidebar 検証
 │   ├── ghostty/config          # Ghostty ターミナル設定
 │   ├── glow/glow.yml           # Glow (markdown viewer) 設定
+│   ├── herdr/plugins/config/persiyanov.reviewr/config.toml # reviewr 固有設定
 │   ├── launchd/                # ユーザー LaunchAgent plist テンプレート
 │   └── karabiner/              # Karabiner-Elements キーリマップ
 ├── hooks/
@@ -65,6 +69,8 @@
 | Fish Shell | 個別ファイル単位のコピー | `fisher` 等が自動生成するファイル (`fish_variables`, テーマ系) の repo 混入を防ぐ |
 | zsh / bash 起動ファイル | コピー (`copy.conf`) | 非対話 shell や `#!/usr/bin/env bash` でも Homebrew の CLI を優先する |
 | Fisher プラグイン | `fish_plugins` のみ追跡 + `fisher update` で復元 | プラグイン本体は upstream で管理されるため、リスト管理で十分 |
+| Herdr plugin | `Herdrfile` の commit 固定一覧 + `herdr plugin install --ref` で同期 | v0.19.0 の tag を解決した commit を渡し、tag の移動に追随しない。版不一致時は自動削除・再導入しない |
+| reviewr 固有設定 | `copy.conf` から `~/.config/herdr/plugins/config/persiyanov.reviewr/config.toml` へコピー | Herdr 本体設定と plugin 設定を分離する upstream の配置規約に合わせる |
 | AWS config | `config.d/` のスニペットを連結して `~/.aws/config` に書き出す | プロファイルごとに分割管理しつつ、AWS CLI が読む単一ファイルを提供 |
 
 注: Codex CLI 設定 (`~/.codex/config.toml` / `~/.codex/AGENTS.md` / `~/.codex/hooks/` /
@@ -75,7 +81,8 @@ dotfiles 側では扱わない。詳細は claude.codex の `install.sh` と `do
 
 | スクリプト | 役割 |
 |-----------|------|
-| `install.sh` | 初回セットアップと日常更新の単一エントリポイント。Brewfile 適用 / 更新、Hermes Agent 導入、設定ファイルコピー、Git ローカル設定の対話的入力、AWS 設定の再展開、Claude Code / mkcert / Fisher / Terraform / npm / Backlog.md / Playwright browser binary / Python tools の同期、macOS defaults 適用、日次メンテナンス LaunchAgent 登録を行う。第 1 引数で MODE (`hermes` / `gws` / `python` / `npm` / `backlog` / `playwright` / `fish` / `docker` / `maintenance`) を指定するとそのモジュールだけ再実行する |
+| `install.sh` | 初回セットアップと日常更新の単一エントリポイント。Brewfile 適用 / 更新、Hermes Agent 導入、設定ファイルコピー、Git ローカル設定の対話的入力、AWS 設定の再展開、Claude Code / Herdr / Herdr plugin / mkcert / Fisher / Terraform / npm / Backlog.md / Playwright browser binary / Python tools の同期、macOS defaults 適用、日次メンテナンス LaunchAgent 登録を行う。第 1 引数で MODE (`herdr` / `hermes` / `gws` / `python` / `npm` / `backlog` / `playwright` / `fish` / `docker` / `maintenance`) を指定するとそのモジュールだけ再実行する |
+| `lib/herdr.sh` | Herdr 本体の存在確認、Herdrfile の plugin 同期、Herdr 専用 mode の設定コピーを行う。版不一致は非破壊の警告として扱い、`all` では後続の dotfiles 同期を継続する |
 | `scripts/docker-disk-maintenance.sh` | Docker Desktop の `Docker.raw` とホスト空き容量を確認し、古い build cache と未使用 image / stopped container / unused network を削除する。volume は削除しない |
 | `scripts/cleanup-local-disk.sh` | Codex Crashpad dump、crude-morning-report の SQLite backup、aws-cliniconnect-terraform の `.terraform` cache、Homebrew cache を整理する。既定は dry-run、日次メンテナンスでは `--apply` で実行する |
 | `scripts/daily-maintenance.sh` | dotfiles worktree が clean の場合に `git pull --ff-only` と `./install.sh` を実行し、その後 `cleanup-local-disk.sh --apply`、Codex 要約、Slack 投稿を行う |
@@ -114,6 +121,7 @@ MODE を追加・変更する場合、認証情報や手動ログインなど re
 | MODE | 内容 |
 |------|------|
 | (none / `all`) | 全モジュールを順に走らせる。以下の専用 MODE の導入・同期内容をすべて含める |
+| `herdr` | Herdr 本体確認、Herdr 設定ファイルコピー、`Herdrfile` の plugin 同期。同期失敗は専用 mode の終了codeへ反映 |
 | `hermes` | `ensure_hermes` (公式 installer 取得 → 実行) と `x-search.fish` 同期 |
 | `gws` | `update_gws` (未導入なら install、導入済みなら brew outdated 判定) |
 | `python` | `ensure_python_tools` (uv venv + Pythonfile) |
@@ -127,6 +135,15 @@ MODE を追加・変更する場合、認証情報や手動ログインなど re
 各モジュールは個別失敗が他に波及しないよう、`lib/<name>.sh` 内で必要なツールの有無
 (`command -v`) を先頭で確認する。`Brewfile` には依存ツール (uv / googleworkspace-cli /
 ffmpeg / bun) を明示し、`Npmfile` / `Pythonfile` は各 lib/ が読む形式で行単位パッケージを列挙する。
+
+Herdr plugin の固定一覧は `Herdrfile` に `plugin_id|GitHub source|manifest version|requested ref`
+形式で記録する。reviewr は upstream の `v0.19.0` tag を
+`659df1d8d41c0f1092c16e77e776fc6e4637677e` に解決しており、同期時はこの commit SHA を
+`herdr plugin install --ref` へ渡す。インストール済み plugin の version、source、requested ref、
+resolved commit が一致しない場合は差異を表示するだけで、自動 uninstall / reinstall は行わない。
+公式 installer の配置先 `~/.local/bin` は同一 install process の PATH にも反映し、新規導入直後の
+plugin 同期が shell 再起動なしで公式配置先の Herdr を使えるようにする。
+専用 `herdr` mode は非0で終了し、通常の `all` は警告後に他の同期を継続する。
 
 ## tmux AI pane navigation
 

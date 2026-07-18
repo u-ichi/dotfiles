@@ -63,6 +63,13 @@ type = "shell"
 command = "python3 \"$HOME/.config/herdr/reflow_clipboard.py\""
 description = "clipboard の表示折り返しを除去"
 
+# reviewr の差分レビューを明示操作で開閉する。auto_open=false のため新規 worktree では開かない。
+[[keys.command]]
+key = "prefix+shift+v"
+type = "plugin_action"
+command = "persiyanov.reviewr.toggle"
+description = "reviewr の差分レビューを開閉"
+
 # 数字キーによる直接切替:
 #   Ctrl+1..9      → tab 切替  (Ghostty 側で csi:<code>;5u を送出)
 #   Cmd+1..9       → workspace 切替  (Ghostty 側で csi:<code>;7u = Ctrl+Alt+N を送出)
@@ -89,7 +96,12 @@ show_agent_labels_on_pane_borders = true
 # agent panel の並び順。"spaces" は workspace ごとにグルーピング (default)、
 # "priority" は blocked → done → working → idle → unknown の順。
 # default 値と同一だが、default 変更に備えて明示。
-agent_panel_sort = "spaces"
+agent_panel_sort = "priority"
+
+[ui.sidebar.spaces]
+# 1行目にSpace title、2行目にTASK-IDとrepo名:branchを表示。
+# TASK-IDが未設定でもrepo名:branchは残す。
+rows = [["workspace"], ["$task_id", "$repo_branch"]]
 
 [ui.toast]
 # バックグラウンド workspace の通知 (agent done / blocked 等) を herdr TUI 内の
@@ -97,3 +109,6 @@ agent_panel_sort = "spaces"
 # terminal / OS 側の通知。"herdr" はトーストクリック or keys.open_notification_target
 # で該当 pane にジャンプできる。
 delivery = "herdr"
+
+[ui.sound]
+enabled = false

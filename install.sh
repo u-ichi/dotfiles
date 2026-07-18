@@ -11,6 +11,7 @@ source "$SCRIPT_DIR/lib/docker.sh"
 source "$SCRIPT_DIR/lib/aws.sh"
 source "$SCRIPT_DIR/lib/terraform.sh"
 source "$SCRIPT_DIR/lib/hermes.sh"
+source "$SCRIPT_DIR/lib/herdr.sh"
 source "$SCRIPT_DIR/lib/gws.sh"
 source "$SCRIPT_DIR/lib/python.sh"
 source "$SCRIPT_DIR/lib/playwright.sh"
@@ -164,6 +165,15 @@ if [ "$MODE" = "hermes" ]; then
   exit 0
 fi
 
+if [ "$MODE" = "herdr" ]; then
+  echo "=== Herdr plugin 同期 ==="
+  ensure_herdr
+  sync_herdr_files
+  sync_herdr_plugins
+  echo "完了しました"
+  exit 0
+fi
+
 if [ "$MODE" = "gws" ]; then
   echo "=== Google Workspace CLI 同期 ==="
   update_gws
@@ -230,7 +240,7 @@ fi
 
 if [ "$MODE" != "all" ]; then
   echo "エラー: 未知の MODE です: $MODE"
-  echo "利用可能: all, hermes, gws, python, npm, backlog, playwright, fish, karabiner, docker, maintenance"
+  echo "利用可能: all, herdr, hermes, gws, python, npm, backlog, playwright, fish, karabiner, docker, maintenance"
   exit 1
 fi
 
@@ -328,6 +338,12 @@ else
   bash "$tmpfile"
   rm -f "$tmpfile"
 fi
+
+# === Herdr + plugin ===
+echo "--- Herdr ---"
+ensure_herdr
+sync_herdr_plugins_for_all
+echo ""
 
 # === mkcert (ローカル TLS 証明書) ===
 echo "--- mkcert ---"

@@ -1,0 +1,4 @@
+# Herdr plugin 固定一覧
+# 形式: plugin_id|GitHub source|manifest version|requested ref
+# v0.19.0 の tag を解決した commit SHA を ref に使い、tag の移動に追随しない。
+persiyanov.reviewr|persiyanov/herdr-reviewr|0.19.0|659df1d8d41c0f1092c16e77e776fc6e4637677e
