@@ -99,9 +99,9 @@ show_agent_labels_on_pane_borders = true
 agent_panel_sort = "priority"
 
 [ui.sidebar.spaces]
-# 1行目にSpace title、2行目にTASK-IDとrepo名:branchを表示。
+# 1行目に状態iconとSpace title、2行目にTASK-IDとrepo名:branchを表示。
 # TASK-IDが未設定でもrepo名:branchは残す。
-rows = [["workspace"], ["$task_id", "$repo_branch"]]
+rows = [["state_icon", "workspace"], ["$task_id", "$repo_branch"]]
 
 [ui.toast]
 # バックグラウンド workspace の通知 (agent done / blocked 等) を herdr TUI 内の
