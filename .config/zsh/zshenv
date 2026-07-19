@@ -1,4 +1,5 @@
 # zsh 経由で起動する非対話 shell でも Homebrew の CLI を優先する。
 # `#!/usr/bin/env bash` はこの PATH を使うため、brew bash が /bin/bash より先に解決される。
-PATH="/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
+# Herdr の vendored libghostty-vt 用 Zig 0.15.2 は keg-only のため先頭へ追加する。
+PATH="/opt/homebrew/opt/zig@0.15/bin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
 export PATH

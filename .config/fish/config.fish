@@ -1,4 +1,5 @@
-fish_add_path /opt/homebrew/bin ~/.local/bin
+# Herdr の vendored libghostty-vt は Zig 0.15.2 固定。versioned formula は keg-only のため明示する。
+fish_add_path /opt/homebrew/opt/zig@0.15/bin /opt/homebrew/bin ~/.local/bin
 
 # SSH 経由では接続元の Ghostty TERM が渡るが、接続先に terminfo が無い場合がある。
 # tmux は起動前の TERM を参照するため、未知なら広く入っている xterm-256color に落とす。

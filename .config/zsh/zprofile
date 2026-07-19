@@ -1,4 +1,5 @@
 # macOS の /etc/zprofile は path_helper で PATH を組み直す。
 # login zsh では .zshenv の後に読まれるため、ここでも Homebrew の CLI を優先し直す。
-PATH="/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
+# Herdr の vendored libghostty-vt 用 Zig 0.15.2 は keg-only のため先頭へ追加する。
+PATH="/opt/homebrew/opt/zig@0.15/bin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
 export PATH
