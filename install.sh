@@ -102,6 +102,27 @@ sync_fish_files() {
   done
 }
 
+sync_vscode_files() {
+  copy_item \
+    ".config/vscode/settings.json" \
+    "$HOME/Library/Application Support/Code/User/settings.json"
+}
+
+sync_vscode_extensions() {
+  local vscodefile="$SCRIPT_DIR/Vscodefile"
+
+  if ! command -v code &>/dev/null; then
+    echo "スキップ: Visual Studio Code がインストールされていません"
+    return
+  fi
+
+  while IFS= read -r extension || [ -n "$extension" ]; do
+    [[ -z "$extension" || "$extension" =~ ^# ]] && continue
+    echo "導入:     $extension"
+    code --install-extension "$extension"
+  done < "$vscodefile"
+}
+
 # Karabiner-Elements は ~/.config/karabiner を FSEvents で監視し karabiner.json の変更を
 # 自動 reload するが、公式 docs によれば (1) 親ディレクトリを作り直すと監視が外れる、
 # (2) karabiner.json を symlink にすると検知しない、という制約がある。install.sh のコピーは
@@ -206,6 +227,14 @@ if [ "$MODE" = "playwright" ]; then
   exit 0
 fi
 
+if [ "$MODE" = "vscode" ]; then
+  echo "=== Visual Studio Code 設定同期 ==="
+  sync_vscode_files
+  sync_vscode_extensions
+  echo "完了しました"
+  exit 0
+fi
+
 if [ "$MODE" = "fish" ]; then
   echo "=== Fish 設定同期 ==="
   echo "--- Fish 設定ファイルコピー ---"
@@ -240,7 +269,7 @@ fi
 
 if [ "$MODE" != "all" ]; then
   echo "エラー: 未知の MODE です: $MODE"
-  echo "利用可能: all, herdr, hermes, gws, python, npm, backlog, playwright, fish, karabiner, docker, maintenance"
+  echo "利用可能: all, herdr, hermes, gws, python, npm, backlog, playwright, vscode, fish, karabiner, docker, maintenance"
   exit 1
 fi
 
@@ -273,6 +302,11 @@ echo ""
 # === 設定ファイルコピー ===
 echo "--- 設定ファイルコピー ---"
 sync_files
+echo ""
+
+# === Visual Studio Code extensions ===
+echo "--- Visual Studio Code 拡張 ---"
+sync_vscode_extensions
 echo ""
 
 # === Karabiner (コピー + 変更時のみ明示 reload) ===

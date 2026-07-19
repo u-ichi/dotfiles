@@ -30,6 +30,7 @@
 ├── Brewfile                    # Homebrew パッケージ・cask 定義
 ├── Npmfile                     # npm グローバルパッケージ定義
 ├── Pythonfile                  # uv 経由で導入する Python パッケージ定義 (python-pptx 等)
+├── Vscodefile                  # Visual Studio Code 拡張一覧
 ├── .config/
 │   ├── fish/                   # Fish Shell 設定
 │   │   ├── config.fish         #   メイン設定 (PATH, alias)
@@ -49,6 +50,7 @@
 │   ├── tmux/test-ai-sidebars-isolated.sh # 専用 socket 上の tmux AI sidebar 検証
 │   ├── ghostty/config          # Ghostty ターミナル設定
 │   ├── glow/glow.yml           # Glow (markdown viewer) 設定
+│   ├── vscode/settings.json    # Visual Studio Code ユーザー設定
 │   ├── herdr/plugins/config/persiyanov.reviewr/config.toml # reviewr 固有設定
 │   ├── launchd/                # ユーザー LaunchAgent plist テンプレート
 │   └── karabiner/              # Karabiner-Elements キーリマップ
@@ -68,6 +70,7 @@
 | 一般的な設定ファイル | コピー (`copy.conf`) | `~/` 配下に実体を置き、リポジトリへの symlink 依存をなくす |
 | Fish Shell | 個別ファイル単位のコピー | `fisher` 等が自動生成するファイル (`fish_variables`, テーマ系) の repo 混入を防ぐ |
 | zsh / bash 起動ファイル | コピー (`copy.conf`) | 非対話 shell や `#!/usr/bin/env bash` でも Homebrew の CLI を優先する |
+| Visual Studio Code | `.config/vscode/settings.json` をユーザー設定へコピーし、`Vscodefile` の拡張を導入 | Markdownの既定表示や閲覧用拡張を端末間で再現する |
 | Fisher プラグイン | `fish_plugins` のみ追跡 + `fisher update` で復元 | プラグイン本体は upstream で管理されるため、リスト管理で十分 |
 | Herdr plugin | `Herdrfile` の commit 固定一覧 + `herdr plugin install --ref` で同期 | v0.19.0 の tag を解決した commit を渡し、tag の移動に追随しない。版不一致時は自動削除・再導入しない |
 | reviewr 固有設定 | `copy.conf` から `~/.config/herdr/plugins/config/persiyanov.reviewr/config.toml` へコピー | Herdr 本体設定と plugin 設定を分離する upstream の配置規約に合わせる |
@@ -81,7 +84,7 @@ dotfiles 側では扱わない。詳細は claude.codex の `install.sh` と `do
 
 | スクリプト | 役割 |
 |-----------|------|
-| `install.sh` | 初回セットアップと日常更新の単一エントリポイント。Brewfile 適用 / 更新、Hermes Agent 導入、設定ファイルコピー、Git ローカル設定の対話的入力、AWS 設定の再展開、Claude Code / Herdr / Herdr plugin / mkcert / Fisher / Terraform / npm / Backlog.md / Playwright browser binary / Python tools の同期、macOS defaults 適用、日次メンテナンス LaunchAgent 登録を行う。第 1 引数で MODE (`herdr` / `hermes` / `gws` / `python` / `npm` / `backlog` / `playwright` / `fish` / `docker` / `maintenance`) を指定するとそのモジュールだけ再実行する |
+| `install.sh` | 初回セットアップと日常更新の単一エントリポイント。Brewfile 適用 / 更新、Hermes Agent 導入、設定ファイルコピー、Git ローカル設定の対話的入力、AWS 設定の再展開、Claude Code / Herdr / Herdr plugin / mkcert / Fisher / Terraform / npm / Backlog.md / Playwright browser binary / Python tools の同期、macOS defaults 適用、日次メンテナンス LaunchAgent 登録を行う。第 1 引数で MODE (`herdr` / `hermes` / `gws` / `python` / `npm` / `backlog` / `playwright` / `vscode` / `fish` / `docker` / `maintenance`) を指定するとそのモジュールだけ再実行する |
 | `lib/herdr.sh` | Herdr 本体の存在確認、Herdrfile の plugin 同期、Herdr 専用 mode の設定コピーを行う。版不一致は非破壊の警告として扱い、`all` では後続の dotfiles 同期を継続する |
 | `scripts/docker-disk-maintenance.sh` | Docker Desktop の `Docker.raw` とホスト空き容量を確認し、古い build cache と未使用 image / stopped container / unused network を削除する。volume は削除しない |
 | `scripts/cleanup-local-disk.sh` | Codex Crashpad dump、crude-morning-report の SQLite backup、aws-cliniconnect-terraform の `.terraform` cache、Homebrew cache を整理する。既定は dry-run、日次メンテナンスでは `--apply` で実行する |
@@ -128,6 +131,7 @@ MODE を追加・変更する場合、認証情報や手動ログインなど re
 | `npm` | `update_npm_globals` (Npmfile) |
 | `backlog` | `ensure_backlog_head` (Backlog.md の main HEAD を Bun でビルドし、`~/.local/bin/backlog` へ配置) |
 | `playwright` | `update_npm_globals` (Npmfile) の後に `ensure_playwright_chromium` で Codex headless browser 検証用 Chromium binary を導入 |
+| `vscode` | Visual Studio Code のユーザー設定をコピーし、`Vscodefile` の拡張を導入 |
 | `fish` | Fish 設定ファイルをコピーし、Fisher を導入または `fisher update` で `fish_plugins` を復元 |
 | `docker` | Docker Desktop AutoStart を有効化し、`docker-disk-maintenance` と LaunchAgent を同期 |
 | `maintenance` | `dotfiles-daily-maintenance` / `dotfiles-cleanup-local-disk` の配置、`~/.config/dotfiles-maintenance/env` テンプレート作成、日次 LaunchAgent 登録 |

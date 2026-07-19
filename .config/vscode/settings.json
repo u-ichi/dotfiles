@@ -1,0 +1,10 @@
+{
+  "editor.unicodeHighlight.allowedLocales": {
+    "ja": true
+  },
+  "editor.unicodeHighlight.nonBasicASCII": false,
+  "editor.unicodeHighlight.ambiguousCharacters": false,
+  "workbench.editorAssociations": {
+    "*.md": "vscode.markdown.preview.editor"
+  }
+}
