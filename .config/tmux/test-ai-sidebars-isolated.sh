@@ -22,6 +22,23 @@ tmux_i() {
   command tmux -S "$SOCKET" "$@"
 }
 
+prefix_binding() {
+  local key="$1"
+
+  tmux_i list-keys -T prefix | awk -v expected="$key" '
+    $1 == "bind-key" {
+      for (i = 2; i <= NF - 2; i++) {
+        candidate = $(i + 2)
+        sub(/^\\/, "", candidate)
+        if ($i == "-T" && $(i + 1) == "prefix" && candidate == expected) {
+          print
+          exit
+        }
+      }
+    }
+  '
+}
+
 sidebar_count() {
   tmux_i list-panes -t "$1" -F '#{@ai_sidebar}' \
     | awk '$1 == "1" { count++ } END { print count + 0 }'
@@ -115,7 +132,7 @@ if [ "$enabled" != "1" ]; then
 fi
 
 for key in c h v '"' %; do
-  binding="$(tmux_i list-keys -T prefix "$key" 2>/dev/null || true)"
+  binding="$(prefix_binding "$key")"
   if ! printf '%s\n' "$binding" | grep -q '#{pane_current_path}'; then
     echo "ERROR: prefix+$key does not inherit pane_current_path" >&2
     printf '%s\n' "$binding" >&2
@@ -123,7 +140,7 @@ for key in c h v '"' %; do
   fi
 done
 
-new_window_binding="$(tmux_i list-keys -T prefix c 2>/dev/null || true)"
+new_window_binding="$(prefix_binding c)"
 for expected_fragment in \
   'split-window -h -c "#{pane_current_path}" -p 45' \
   'split-window -v -c "#{pane_current_path}" -p 66' \
@@ -385,7 +402,7 @@ if command -v jq >/dev/null 2>&1; then
 {"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_a6","name":"TaskUpdate","input":{"taskId":"3","status":"in_progress"}}]}}
 {"type":"user","message":{"content":[{"tool_use_id":"toolu_a6","type":"tool_result","content":"Updated"}]},"toolUseResult":{"success":true,"taskId":"3","updatedFields":["status"]}}
 CLAUDE_JSONL
-  if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; set green (set_color green); set normal (set_color normal); set lines (__ai_claude_task_lines '$claude_task_file' 80 20); test \"\$lines[1]\" = 'sidebar 復旧'; and test \"\$lines[2]\" = \"\$green▶ 1/2 親タスクで原因調査\$normal\"; and test \"\$lines[3]\" = '  ✓ 子タスクで実装'; and test \"\$lines[4]\" = \"\$green  ▶ 子タスク2 で検証\$normal\""; then
+  if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; set green (set_color green); set normal (set_color normal); set lines (__ai_claude_task_lines '$claude_task_file' 80 20); set expected_goal (string join \\t goal 'sidebar 復旧'); set expected_root (string join \\t regular \"\$green▶ 0/1 親タスクで原因調査\$normal\"); set expected_child (string join \\t regular \"\$green  ▶ 子タスク2 で検証\$normal\"); test (count \$lines) -eq 3; and test \"\$lines[1]\" = \"\$expected_goal\"; and test \"\$lines[2]\" = \"\$expected_root\"; and test \"\$lines[3]\" = \"\$expected_child\""; then
     echo "ERROR: Claude task tree lines are invalid" >&2
     fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; __ai_claude_task_lines '$claude_task_file' 80 20" >&2 || true
     exit 1
@@ -398,7 +415,7 @@ CLAUDE_JSONL
 {"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_a8","name":"TaskUpdate","input":{"taskId":"4","status":"deleted"}}]}}
 {"type":"user","message":{"content":[{"tool_use_id":"toolu_a8","type":"tool_result","content":"Updated"}]},"toolUseResult":{"success":true,"taskId":"4","updatedFields":["status"]}}
 CLAUDE_JSONL2
-  if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; set lines (__ai_claude_task_lines '$claude_task_file' 80 20); test (count \$lines) -eq 4"; then
+  if ! fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; set lines (__ai_claude_task_lines '$claude_task_file' 80 20); test (count \$lines) -eq 3"; then
     echo "ERROR: Claude deleted tasks should not appear" >&2
     fish -c "source '$SCRIPT_DIR/../fish/functions/ai-panes-sidebar.fish'; __ai_claude_task_lines '$claude_task_file' 80 20" >&2 || true
     exit 1
@@ -434,6 +451,7 @@ fi
 
 tmux_i set-option -p -t "$normal_pane" @tmux_bridge_task ""
 tmux_i set-option -p -t "$normal_pane" @tmux_bridge_role ""
+tmux_i set-option -p -t "$normal_pane" @tmux_bridge_name ""
 tmux_i set-option -p -t "$normal_pane" @fixed_title ""
 tmux_i set-option -p -t "$normal_pane" @ai_app ""
 tmux_i set-option -p -t "$normal_pane" @ai_codex_session_file ""
@@ -455,7 +473,7 @@ if [ "$sidebar_title_seen" -ne 1 ]; then
   exit 1
 fi
 if printf '%s\n' "$sidebar_output" | grep -Fq "worker1"; then
-  echo "ERROR: sidebar should not prefix tmux-bridge name in pane display" >&2
+  echo "ERROR: sidebar retained a cleared tmux-bridge name" >&2
   printf '%s\n' "$sidebar_output" >&2
   exit 1
 fi

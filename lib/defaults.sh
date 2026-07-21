@@ -9,6 +9,12 @@ DEFAULTS=(
   "com.google.drivefs.settings DisableLocalizedVirtualFolders -bool true"
 )
 
+SPOTLIGHT_NEVER_INDEX_RELATIVE_PATHS=(
+  ".git"
+  ".obsidian"
+  "Daily/attachments"
+)
+
 apply_defaults() {
   for entry in "${DEFAULTS[@]}"; do
     local domain key type value
@@ -35,4 +41,35 @@ apply_defaults() {
       defaults write "$domain" "$key" "$type" "$value"
     fi
   done
+}
+
+apply_spotlight_never_index() {
+  local vault relative_path target marker
+  local vault_found=0
+
+  for vault in "$HOME"/Library/CloudStorage/GoogleDrive-*/"My Drive"/Obsidian/u1memo; do
+    [ -d "$vault" ] || continue
+    vault_found=1
+
+    for relative_path in "${SPOTLIGHT_NEVER_INDEX_RELATIVE_PATHS[@]}"; do
+      target="$vault/$relative_path"
+      if [ ! -d "$target" ]; then
+        echo "スキップ: Spotlight 除外対象がありません: $target"
+        continue
+      fi
+
+      marker="$target/.metadata_never_index"
+      if [ -e "$marker" ]; then
+        echo "済み:     $marker"
+      else
+        : > "$marker"
+        chmod 600 "$marker"
+        echo "作成:     $marker"
+      fi
+    done
+  done
+
+  if [ "$vault_found" -eq 0 ]; then
+    echo "スキップ: Google Drive の Obsidian/u1memo がありません"
+  fi
 }

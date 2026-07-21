@@ -267,9 +267,16 @@ if [ "$MODE" = "maintenance" ]; then
   exit 0
 fi
 
+if [ "$MODE" = "spotlight" ]; then
+  echo "=== Spotlight 除外設定 ==="
+  apply_spotlight_never_index
+  echo "完了しました"
+  exit 0
+fi
+
 if [ "$MODE" != "all" ]; then
   echo "エラー: 未知の MODE です: $MODE"
-  echo "利用可能: all, herdr, hermes, gws, python, npm, backlog, playwright, vscode, fish, karabiner, docker, maintenance"
+  echo "利用可能: all, herdr, hermes, gws, python, npm, backlog, playwright, vscode, fish, karabiner, docker, maintenance, spotlight"
   exit 1
 fi
 
@@ -410,6 +417,11 @@ restore_fisher_plugins
 # === macOS defaults ===
 echo "--- macOS defaults ---"
 apply_defaults
+echo ""
+
+# === Spotlight 除外 ===
+echo "--- Spotlight 除外 ---"
+apply_spotlight_never_index
 echo ""
 
 # === アプリケーション設定 ===
