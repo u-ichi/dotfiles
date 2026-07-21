@@ -61,6 +61,24 @@ echo "=== tmux safety guard ==="
 "$SCRIPT_DIR/scripts/check-tmux-safety.sh" --all || errors=$((errors + 1))
 echo ""
 
+# === Spotlight (配布経路 + 停止判定) ===
+echo "=== Spotlight tests ==="
+if [ -x "$SCRIPT_DIR/scripts/test-spotlight.sh" ]; then
+  echo "  scripts/test-spotlight.sh"
+  "$SCRIPT_DIR/scripts/test-spotlight.sh" || errors=$((errors + 1))
+else
+  echo "  エラー: scripts/test-spotlight.sh がありません"
+  errors=$((errors + 1))
+fi
+if [ -x "$SCRIPT_DIR/scripts/test-disable-spotlight-indexing.sh" ]; then
+  echo "  scripts/test-disable-spotlight-indexing.sh"
+  "$SCRIPT_DIR/scripts/test-disable-spotlight-indexing.sh" || errors=$((errors + 1))
+else
+  echo "  エラー: scripts/test-disable-spotlight-indexing.sh がありません"
+  errors=$((errors + 1))
+fi
+echo ""
+
 # === taplo (TOML) ===
 echo "=== TOML ==="
 if command -v taplo &>/dev/null; then

@@ -16,6 +16,13 @@ jobs:
         run: |
           git ls-files -z '*.sh' | xargs -0 shellcheck -x
 
+      # lint.sh 全体は plutil / tmux 等で ubuntu と差分があるため、
+      # Spotlight 配布・停止判定テストだけ最小配線する。
+      - name: Spotlight tests
+        run: |
+          bash scripts/test-spotlight.sh
+          bash scripts/test-disable-spotlight-indexing.sh
+
       - name: Fish syntax check
         run: |
           sudo apt-get update -qq

@@ -269,6 +269,7 @@ fi
 
 if [ "$MODE" = "spotlight" ]; then
   echo "=== Spotlight 除外設定 ==="
+  install_disable_spotlight_indexing
   apply_spotlight_never_index
   echo "完了しました"
   exit 0
@@ -421,6 +422,7 @@ echo ""
 
 # === Spotlight 除外 ===
 echo "--- Spotlight 除外 ---"
+install_disable_spotlight_indexing
 apply_spotlight_never_index
 echo ""
 

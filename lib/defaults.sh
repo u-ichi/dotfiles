@@ -73,3 +73,17 @@ apply_spotlight_never_index() {
     echo "スキップ: Google Drive の Obsidian/u1memo がありません"
   fi
 }
+
+# 内蔵ボリューム向け Spotlight 索引停止コマンドを ~/.local/bin へ配布する。
+# apply（mdutil -i off）は install では実行しない。利用者が明示的に apply する。
+install_disable_spotlight_indexing() {
+  local dest="$HOME/.local/bin/disable-spotlight-indexing"
+
+  mkdir -p "$(dirname "$dest")"
+  copy_item "scripts/disable-spotlight-indexing.sh" "$dest"
+  if [ ! -f "$dest" ]; then
+    echo "エラー: $dest を配置できませんでした" >&2
+    return 1
+  fi
+  chmod 755 "$dest"
+}
