@@ -1,2 +1,7 @@
 # Python packages for local automation
+pdf2image
+python-docx
 python-pptx
+# 既存 PDF (官公庁の指定様式など) へ文字を重ねて記入するために使う。
+# import 名は fitz。CJK フォントを内蔵しており日本語をそのまま書き込める
+PyMuPDF

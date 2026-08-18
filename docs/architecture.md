@@ -25,7 +25,7 @@
 │   ├── herdr.sh                #   Herdr 本体確認と plugin 同期
 │   ├── hermes.sh               #   Hermes Agent (x_search) の明示導入補助
 │   ├── gws.sh                  #   Google Workspace CLI (gws) の明示導入・更新補助
-│   ├── python.sh               #   uv ベースの Python automation tools (Pythonfile) 同期
+│   ├── python.sh               #   Pythonfile を素の python3 から import できる形で同期
 │   └── maintenance.sh          #   日次メンテナンス LaunchAgent の同期
 ├── Brewfile                    # Homebrew パッケージ・cask 定義
 ├── Npmfile                     # npm グローバルパッケージ定義
@@ -127,7 +127,7 @@ MODE を追加・変更する場合、認証情報や手動ログインなど re
 | `herdr` | Herdr 本体確認、Herdr 設定ファイルコピー、`Herdrfile` の plugin 同期。同期失敗は専用 mode の終了codeへ反映 |
 | `hermes` | `ensure_hermes` (公式 installer 取得 → 実行) と `x-search.fish` 同期 |
 | `gws` | `update_gws` (未導入なら install、導入済みなら brew outdated 判定) |
-| `python` | `ensure_python_tools` (uv venv + Pythonfile) |
+| `python` | `ensure_python_tools` (`Pythonfile` を `~/.local/share/dotfiles/python-site/<X.Y>` へ `uv pip install --target` し、user site の `.pth` で素の python3 に載せる。python の minor 更新は state 比較で検出して入れ直す) |
 | `npm` | `update_npm_globals` (Npmfile) |
 | `backlog` | `ensure_backlog_head` (Backlog.md の main HEAD を Bun でビルドし、`~/.local/bin/backlog` へ配置) |
 | `playwright` | `update_npm_globals` (Npmfile) の後に `ensure_playwright_chromium` で Codex headless browser 検証用 Chromium binary を導入 |
@@ -140,6 +140,20 @@ MODE を追加・変更する場合、認証情報や手動ログインなど re
 各モジュールは個別失敗が他に波及しないよう、`lib/<name>.sh` 内で必要なツールの有無
 (`command -v`) を先頭で確認する。`Brewfile` には依存ツール (uv / googleworkspace-cli /
 ffmpeg / bun) を明示し、`Npmfile` / `Pythonfile` は各 lib/ が読む形式で行単位パッケージを列挙する。
+
+`Pythonfile` の導入先は専用 venv ではなく、`~/.local/share/dotfiles/python-site/<X.Y>`
+(dotfiles 専用 dir) で、これを `command -v python3` が指す python の user site へ置く
+`dotfiles-python-tools.pth` で sys.path に載せる。venv に隔離すると、venv を知らない
+呼び出し側 (別プロジェクトの agent 等) が `python3 -c "import docx"` で
+「ライブラリの無い環境」と判断して自作に走るため、素の python3 から見える形にする。
+Homebrew の site-packages 本体には書き込まないので brew 管理の python パッケージは壊れない。
+
+python の minor が上がると拡張モジュール (lxml / pillow / PyMuPDF) は ABI 不一致で
+import できなくなる。`ensure_python_tools` は導入先と series を
+`~/.local/share/dotfiles/python-site/state` に記録し、次回実行時に python の series が
+変わっていれば「旧 series の dir と旧 .pth を削除 → 新 series へ導入」を自動で行う
+(削除対象は dotfiles が作った path のみ)。よって `brew upgrade` で python が上がっても、
+その後の `./install.sh` (日次メンテナンス経由を含む) が吸収する。
 
 Herdr plugin の固定一覧は `Herdrfile` に `plugin_id|GitHub source|manifest version|requested ref`
 形式で記録する。reviewr は upstream の `v0.19.0` tag を
