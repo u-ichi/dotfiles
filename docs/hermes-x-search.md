@@ -5,10 +5,11 @@ Hermes Agent の `x_search` を、dotfiles 管理の `x-search` fish function �
 ## 管理方針
 
 - dotfiles で管理するもの:
-  - Hermes Agent の明示導入補助
-  - `x-search` fish function
+  - Hermes Agent Desktop の cask 登録 (`Brewfile` の `cask 'hermes-desktop'`)
+  - `x-search` fish function (`copy.conf` でコピー)
   - 初回設定と検証手順
 - dotfiles で管理しないもの:
+  - Hermes 本体のバージョン (デスクトップアプリ起動時の更新に委ねる)
   - `~/.hermes/auth.json`
   - `~/.hermes/config.yaml`
   - `XAI_API_KEY` などの認証情報
@@ -17,17 +18,34 @@ OAuth token は Hermes が `~/.hermes/auth.json` に保存する。これは機�
 
 ## 導入
 
-通常の `install.sh` では Hermes も含めて同期する。
-Hermes だけを導入・再確認する場合は、明示的に次を実行する。
+`Brewfile` の `cask 'hermes-desktop'` で `/Applications/Hermes.app` が入る。
+これはセットアップランチャー (`Hermes-Setup`、bundle ID `com.nousresearch.hermes.setup`) であり、
+Hermes 本体ではない。
 
-```bash
-./install.sh hermes
-```
+初回に `/Applications/Hermes.app` を起動すると公式 installer が `--include-desktop` 付きで走り、
+次の 3 つを作る。
 
-Hermes の公式 installer は `~/.hermes/hermes-agent/` に本体を置き、`~/.local/bin/hermes` を作る。
+| 場所 | 中身 |
+|------|------|
+| `~/.hermes/hermes-agent/` | 本体 (NousResearch/hermes-agent の git clone、main ブランチ) |
+| `~/.local/bin/hermes` | CLI ラッパー (`~/.hermes/hermes-agent/venv/bin/python` を exec する) |
+| `~/.hermes/hermes-agent/apps/desktop/release/mac-arm64/Hermes.app` | Electron アプリ本体 |
+
 fish の PATH には `~/.local/bin` が含まれているため、新しい shell で `hermes` が見える。
-初回導入時に `uv` が `~/.local/bin/uv`、`ffmpeg` が Homebrew に導入されることがある。
+初回導入時に `uv` が `~/.hermes/bin/uv`、`ffmpeg` が Homebrew に導入されることがある。
 `ffmpeg` は Brewfile でも管理対象にしている。
+
+## 更新
+
+CLI とデスクトップアプリは同じ git clone を共有するので、版は常に一致する。
+更新経路はデスクトップアプリの起動に一本化している。
+
+- `/Applications/Hermes.app` を起動する → 公式 installer が `git pull` し、Electron アプリも再ビルドする。
+  既存の `auth.json` / `config.yaml` がある場合、対話が要る stage (`setup` / `gateway`) は skip される
+- `hermes update` でも CLI 側の code は更新できるが、Electron アプリは再ビルドされない
+
+`install.sh` は Hermes の版を管理しない (以前の `./install.sh hermes` MODE と `lib/hermes.sh` は廃止した)。
+`x-search.fish` のコピーは `copy.conf` が担う。
 
 ## 初回認証
 

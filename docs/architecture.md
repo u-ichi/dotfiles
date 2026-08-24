@@ -23,7 +23,6 @@
 │   ├── defaults.sh             #   macOS defaults と Spotlight 除外の適用
 │   ├── aws.sh                  #   AWS config を config.d パターンで組み立て
 │   ├── herdr.sh                #   Herdr 本体確認と plugin 同期
-│   ├── hermes.sh               #   Hermes Agent (x_search) の明示導入補助
 │   ├── gws.sh                  #   Google Workspace CLI (gws) の明示導入・更新補助
 │   ├── python.sh               #   Pythonfile を素の python3 から import できる形で同期
 │   └── maintenance.sh          #   日次メンテナンス LaunchAgent の同期
@@ -84,7 +83,7 @@ dotfiles 側では扱わない。詳細は claude.codex の `install.sh` と `do
 
 | スクリプト | 役割 |
 |-----------|------|
-| `install.sh` | 初回セットアップと日常更新の単一エントリポイント。Brewfile 適用 / 更新、Hermes Agent 導入、設定ファイルコピー、Git ローカル設定の対話的入力、AWS 設定の再展開、Claude Code / Herdr / Herdr plugin / mkcert / Fisher / Terraform / npm / Backlog.md / Playwright browser binary / Python tools の同期、macOS defaults と Spotlight 除外の適用、日次メンテナンス LaunchAgent 登録を行う。第 1 引数で MODE (`herdr` / `hermes` / `gws` / `python` / `npm` / `backlog` / `playwright` / `vscode` / `fish` / `docker` / `maintenance` / `spotlight`) を指定するとそのモジュールだけ再実行する |
+| `install.sh` | 初回セットアップと日常更新の単一エントリポイント。Brewfile 適用 / 更新、設定ファイルコピー、Git ローカル設定の対話的入力、AWS 設定の再展開、Claude Code / Herdr / Herdr plugin / mkcert / Fisher / Terraform / npm / Backlog.md / Playwright browser binary / Python tools の同期、macOS defaults と Spotlight 除外の適用、日次メンテナンス LaunchAgent 登録を行う。第 1 引数で MODE (`herdr` / `gws` / `python` / `npm` / `backlog` / `playwright` / `vscode` / `fish` / `docker` / `maintenance` / `spotlight`) を指定するとそのモジュールだけ再実行する |
 | `lib/herdr.sh` | Herdr 本体の存在確認、Herdrfile の plugin 同期、Herdr 専用 mode の設定コピーを行う。版不一致は非破壊の警告として扱い、`all` では後続の dotfiles 同期を継続する |
 | `scripts/docker-disk-maintenance.sh` | Docker Desktop の `Docker.raw` とホスト空き容量を確認し、古い build cache と未使用 image / stopped container / unused network を削除する。volume は削除しない |
 | `scripts/cleanup-local-disk.sh` | Codex Crashpad dump、crude-morning-report の SQLite backup、aws-cliniconnect-terraform の `.terraform` cache、Homebrew cache を整理する。既定は dry-run、日次メンテナンスでは `--apply` で実行する |
@@ -125,7 +124,6 @@ MODE を追加・変更する場合、認証情報や手動ログインなど re
 |------|------|
 | (none / `all`) | 全モジュールを順に走らせる。以下の専用 MODE の導入・同期内容をすべて含める |
 | `herdr` | Herdr 本体確認、Herdr 設定ファイルコピー、`Herdrfile` の plugin 同期。同期失敗は専用 mode の終了codeへ反映 |
-| `hermes` | `ensure_hermes` (公式 installer 取得 → 実行) と `x-search.fish` 同期 |
 | `gws` | `update_gws` (未導入なら install、導入済みなら brew outdated 判定) |
 | `python` | `ensure_python_tools` (`Pythonfile` を `~/.local/share/dotfiles/python-site/<X.Y>` へ `uv pip install --target` し、user site の `.pth` で素の python3 に載せる。python の minor 更新は state 比較で検出して入れ直す) |
 | `npm` | `update_npm_globals` (Npmfile) |

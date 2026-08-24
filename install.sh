@@ -10,7 +10,6 @@ source "$SCRIPT_DIR/lib/defaults.sh"
 source "$SCRIPT_DIR/lib/docker.sh"
 source "$SCRIPT_DIR/lib/aws.sh"
 source "$SCRIPT_DIR/lib/terraform.sh"
-source "$SCRIPT_DIR/lib/hermes.sh"
 source "$SCRIPT_DIR/lib/herdr.sh"
 source "$SCRIPT_DIR/lib/gws.sh"
 source "$SCRIPT_DIR/lib/python.sh"
@@ -172,20 +171,6 @@ restore_fisher_plugins() {
   echo ""
 }
 
-sync_hermes_files() {
-  echo "--- Hermes Agent 関連ファイル ---"
-  copy_item ".config/fish/functions/x-search.fish" "$HOME/.config/fish/functions/x-search.fish"
-  echo ""
-}
-
-if [ "$MODE" = "hermes" ]; then
-  echo "=== Hermes Agent セットアップ ==="
-  ensure_hermes
-  sync_hermes_files
-  echo "完了しました"
-  exit 0
-fi
-
 if [ "$MODE" = "herdr" ]; then
   echo "=== Herdr plugin 同期 ==="
   ensure_herdr
@@ -277,7 +262,7 @@ fi
 
 if [ "$MODE" != "all" ]; then
   echo "エラー: 未知の MODE です: $MODE"
-  echo "利用可能: all, herdr, hermes, gws, python, npm, backlog, playwright, vscode, fish, karabiner, docker, maintenance, spotlight"
+  echo "利用可能: all, herdr, gws, python, npm, backlog, playwright, vscode, fish, karabiner, docker, maintenance, spotlight"
   exit 1
 fi
 
@@ -300,11 +285,6 @@ sync_homebrew
 # === Codex quarantine 対策 ===
 echo "--- Codex CLI ---"
 fix_codex_quarantine
-echo ""
-
-# === Hermes Agent ===
-echo "--- Hermes Agent ---"
-ensure_hermes
 echo ""
 
 # === 設定ファイルコピー ===
