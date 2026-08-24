@@ -4,3 +4,7 @@
 @colbymchenry/codegraph-darwin-arm64
 # Codex の headless browser 検証で使う Playwright CLI
 playwright
+# Excel ファイルの作成・編集
+exceljs
+# PowerPoint ファイルの作成・編集
+pptxgenjs

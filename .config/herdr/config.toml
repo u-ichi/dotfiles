@@ -70,6 +70,16 @@ type = "plugin_action"
 command = "persiyanov.reviewr.toggle"
 description = "reviewr の差分レビューを開閉"
 
+# Claude Code を plan mode へ入れる。/plan を直接打つ代わりにこのキーを使う。
+# opusplan の自動 model 切替は context 200k 超で発動せず、effort は session 単位で
+# しか設定できないため、model (fable) と effort (high) を slash command として
+# 注入してから plan へ入る。詳細は claude-plan-mode.sh の冒頭コメント。
+[[keys.command]]
+key = "prefix+shift+m"
+type = "shell"
+command = "bash \"$HOME/.config/herdr/claude-plan-mode.sh\" plan"
+description = "Claude を fable + effort high で plan mode へ"
+
 # 数字キーによる直接切替:
 #   Ctrl+1..9      → tab 切替  (Ghostty 側で csi:<code>;5u を送出)
 #   Cmd+1..9       → workspace 切替  (Ghostty 側で csi:<code>;7u = Ctrl+Alt+N を送出)
