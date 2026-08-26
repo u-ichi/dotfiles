@@ -7,6 +7,10 @@
 # 別マシンへ dotfiles 展開した直後の初回起動でも tutorial に入らないようにする。
 onboarding = false
 
+[theme]
+# Ghostty の Catppuccin Latte と揃えて、Herdr の操作部分も白基調に固定する。
+name = "catppuccin-latte"
+
 [keys]
 # prefix を tmux と揃える
 prefix = "ctrl+a"

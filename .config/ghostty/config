@@ -12,8 +12,8 @@ font-size = 14
 # CJK の太字を不可視にすることを実測した (2026-07-26、削除後に太字表示が復活)。
 # cmux は不使用のため削除。cmux を再導入する場合は CJK 太字とのトレードオフに注意。
 
-# === テーマ（システムのライト/ダークに自動追従） ===
-theme = light:Catppuccin Latte,dark:Catppuccin Mocha
+# === テーマ（白基調に固定） ===
+theme = Catppuccin Latte
 
 # === ウィンドウ ===
 window-padding-x = 12
