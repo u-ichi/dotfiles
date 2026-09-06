@@ -24,6 +24,7 @@
 │   ├── aws.sh                  #   AWS config を config.d パターンで組み立て
 │   ├── herdr.sh                #   Herdr 本体確認と plugin 同期
 │   ├── gws.sh                  #   Google Workspace CLI (gws) の明示導入・更新補助
+│   ├── orca.sh                 #   HW フォント導入と Orca のフォント設定適用
 │   ├── python.sh               #   Pythonfile を素の python3 から import できる形で同期
 │   └── maintenance.sh          #   日次メンテナンス LaunchAgent の同期
 ├── Brewfile                    # Homebrew パッケージ・cask 定義
@@ -83,7 +84,7 @@ dotfiles 側では扱わない。詳細は claude.codex の `install.sh` と `do
 
 | スクリプト | 役割 |
 |-----------|------|
-| `install.sh` | 初回セットアップと日常更新の単一エントリポイント。Brewfile 適用 / 更新、設定ファイルコピー、Git ローカル設定の対話的入力、AWS 設定の再展開、Claude Code / Herdr / Herdr plugin / mkcert / Fisher / Terraform / npm / Backlog.md / Playwright browser binary / Python tools の同期、macOS defaults と Spotlight 除外の適用、日次メンテナンス LaunchAgent 登録を行う。第 1 引数で MODE (`herdr` / `gws` / `python` / `npm` / `backlog` / `playwright` / `vscode` / `fish` / `docker` / `maintenance` / `spotlight`) を指定するとそのモジュールだけ再実行する |
+| `install.sh` | 初回セットアップと日常更新の単一エントリポイント。Brewfile 適用 / 更新、設定ファイルコピー、Git ローカル設定の対話的入力、AWS 設定の再展開、Claude Code / Herdr / Herdr plugin / mkcert / Fisher / Terraform / npm / Backlog.md / Playwright browser binary / Python tools の同期、macOS defaults と Spotlight 除外の適用、日次メンテナンス LaunchAgent 登録を行う。第 1 引数で MODE (`orca` / `herdr` / `gws` / `python` / `npm` / `backlog` / `playwright` / `vscode` / `fish` / `docker` / `maintenance` / `spotlight`) を指定するとそのモジュールだけ再実行する |
 | `lib/herdr.sh` | Herdr 本体の存在確認、Herdrfile の plugin 同期、Herdr 専用 mode の設定コピーを行う。版不一致は非破壊の警告として扱い、`all` では後続の dotfiles 同期を継続する |
 | `scripts/docker-disk-maintenance.sh` | Docker Desktop の `Docker.raw` とホスト空き容量を確認し、古い build cache と未使用 image / stopped container / unused network を削除する。volume は削除しない |
 | `scripts/cleanup-local-disk.sh` | Codex Crashpad dump、crude-morning-report の SQLite backup、aws-cliniconnect-terraform の `.terraform` cache、Homebrew cache を整理する。既定は dry-run、日次メンテナンスでは `--apply` で実行する |
@@ -127,6 +128,7 @@ MODE を追加・変更する場合、認証情報や手動ログインなど re
 | `gws` | `update_gws` (未導入なら install、導入済みなら brew outdated 判定) |
 | `python` | `ensure_python_tools` (`Pythonfile` を `~/.local/share/dotfiles/python-site/<X.Y>` へ `uv pip install --target` し、user site の `.pth` で素の python3 に載せる。python の minor 更新は state 比較で検出して入れ直す) |
 | `npm` | `update_npm_globals` (Npmfile) |
+| `orca` | Brewfile の `font-moralerspace-hw` だけを導入し、`.config/orca/settings.json` を終了中のローカル Orca に適用 |
 | `backlog` | `ensure_backlog_head` (Backlog.md の main HEAD を Bun でビルドし、`~/.local/bin/backlog` へ配置) |
 | `playwright` | `update_npm_globals` (Npmfile) の後に `ensure_playwright_chromium` で Codex headless browser 検証用 Chromium binary を導入 |
 | `vscode` | Visual Studio Code のユーザー設定をコピーし、`Vscodefile` の拡張を導入 |
@@ -161,6 +163,33 @@ resolved commit が一致しない場合は差異を表示するだけで、自�
 公式 installer の配置先 `~/.local/bin` は同一 install process の PATH にも反映し、新規導入直後の
 plugin 同期が shell 再起動なしで公式配置先の Herdr を使えるようにする。
 専用 `herdr` mode は非0で終了し、通常の `all` は警告後に他の同期を継続する。
+
+## Orca のフォント設定
+
+`Brewfile` が HW フォントの導入を管理し、`.config/orca/settings.json` が
+`terminalFontFamily` と `terminalFontSize` を管理する。`./install.sh orca` で導入・設定を適用する。
+通常の `./install.sh` でも、Brewfile の適用後に Orca の設定を同期する。
+Orca が起動中で変更が必要な場合、または初回起動前なら、通常の `./install.sh` では未適用を表示して継続する。
+専用 MODE では未適用を失敗として返す。Orca の初回起動を済ませ、終了してから
+`./install.sh orca` を実行する。
+
+Orca は設定とセッション情報を同じ保存ファイルで管理するため、`copy.conf` でそのファイルを
+上書きしない。`scripts/apply-orca-settings.py` が終了状態と選択中のプロファイルを確認し、
+保存ファイルの `settings.terminalFontFamily` と `settings.terminalFontSize` だけを更新して読み戻す。
+ほかの設定とセッション情報を保持する。同じ値ならファイルを書き直さない。
+保存済みの値が管理ファイルと一致する場合は、起動中でも適用済みとして正常終了する。
+保存先は `~/Library/Application Support/orca` 以下で、Orca CLI と同じ
+`ORCA_USER_DATA_PATH` による配置先指定にも対応する。
+認証情報や設定全体はログにもリポジトリにも保存しない。
+
+Moralerspace 通常版の半角・全角幅は 3:5、HW 版は 1:2。
+HW 版は Orca の変換中の文字幅と確定後の 2 マス幅を揃えるために使う。
+20 px では半角幅が 10.5 px となり丸めの差が残るため、実機で確認した 21 px を使う。
+元の通常版フォントは残し、Ghostty や IDE のフォント設定は変更しない。
+`scripts/test-orca-settings.py` でほかの設定の保持・再実行・起動中の更新拒否を検査し、`lint.sh` からも実行する。
+
+参照: [Moralerspace のバリエーション](https://github.com/yuru7/moralerspace#バリエーション)、
+[Orca の保存先の選択](https://github.com/stablyai/orca/blob/04aa03ad620206ec13b00d5204f14ea579b1b7b9/src/cli/handlers/agent-hooks.ts)。
 
 ## tmux AI pane navigation
 

@@ -16,6 +16,7 @@ source "$SCRIPT_DIR/lib/python.sh"
 source "$SCRIPT_DIR/lib/playwright.sh"
 source "$SCRIPT_DIR/lib/maintenance.sh"
 source "$SCRIPT_DIR/lib/backlog.sh"
+source "$SCRIPT_DIR/lib/orca.sh"
 
 MODE="${1:-all}"
 
@@ -171,6 +172,14 @@ restore_fisher_plugins() {
   echo ""
 }
 
+if [ "$MODE" = "orca" ]; then
+  echo "=== Orca フォント・設定同期 ==="
+  ensure_orca_font
+  sync_orca_settings
+  echo "完了しました"
+  exit 0
+fi
+
 if [ "$MODE" = "herdr" ]; then
   echo "=== Herdr plugin 同期 ==="
   ensure_herdr
@@ -262,7 +271,7 @@ fi
 
 if [ "$MODE" != "all" ]; then
   echo "エラー: 未知の MODE です: $MODE"
-  echo "利用可能: all, herdr, gws, python, npm, backlog, playwright, vscode, fish, karabiner, docker, maintenance, spotlight"
+  echo "利用可能: all, orca, herdr, gws, python, npm, backlog, playwright, vscode, fish, karabiner, docker, maintenance, spotlight"
   exit 1
 fi
 
@@ -281,6 +290,9 @@ echo ""
 
 # === Homebrew ===
 sync_homebrew
+
+# === Orca (起動中なら終了後の適用方法を表示) ===
+sync_orca_settings --allow-skip
 
 # === Codex quarantine 対策 ===
 echo "--- Codex CLI ---"

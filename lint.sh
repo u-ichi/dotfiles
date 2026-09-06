@@ -25,6 +25,11 @@ else
 fi
 echo ""
 
+# === Orca 設定の部分更新 ===
+echo "=== Orca settings ==="
+python3 "$SCRIPT_DIR/scripts/test-orca-settings.py" || errors=$((errors + 1))
+echo ""
+
 # === Fish 構文チェック ===
 echo "=== Fish ==="
 if command -v fish &>/dev/null; then
