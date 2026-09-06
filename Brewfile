@@ -17,6 +17,7 @@ brew 'tfenv'
 brew 'trivy'
 
 # === CLI: 開発ツール ===
+cask 'antigravity-cli'
 brew 'bash'
 brew 'bun'
 brew 'cargo-nextest'

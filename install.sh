@@ -17,6 +17,7 @@ source "$SCRIPT_DIR/lib/playwright.sh"
 source "$SCRIPT_DIR/lib/maintenance.sh"
 source "$SCRIPT_DIR/lib/backlog.sh"
 source "$SCRIPT_DIR/lib/orca.sh"
+source "$SCRIPT_DIR/lib/antigravity.sh"
 
 MODE="${1:-all}"
 
@@ -172,6 +173,13 @@ restore_fisher_plugins() {
   echo ""
 }
 
+if [ "$MODE" = "antigravity" ]; then
+  ensure_antigravity
+  sync_antigravity_settings
+  echo "完了しました"
+  exit 0
+fi
+
 if [ "$MODE" = "orca" ]; then
   echo "=== Orca フォント・設定同期 ==="
   ensure_orca_font
@@ -271,7 +279,7 @@ fi
 
 if [ "$MODE" != "all" ]; then
   echo "エラー: 未知の MODE です: $MODE"
-  echo "利用可能: all, orca, herdr, gws, python, npm, backlog, playwright, vscode, fish, karabiner, docker, maintenance, spotlight"
+  echo "利用可能: all, antigravity, orca, herdr, gws, python, npm, backlog, playwright, vscode, fish, karabiner, docker, maintenance, spotlight"
   exit 1
 fi
 
@@ -290,6 +298,7 @@ echo ""
 
 # === Homebrew ===
 sync_homebrew
+sync_antigravity_settings
 
 # === Orca (起動中なら終了後の適用方法を表示) ===
 sync_orca_settings --allow-skip
