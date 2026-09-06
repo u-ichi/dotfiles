@@ -18,6 +18,7 @@
 │   ├── docker-disk-maintenance.sh # Docker Desktop の容量監視と安全側 prune
 │   └── test-herdr-plugin-sync.sh # Herdr plugin 同期の standalone 検証
 ├── lib/
+│   ├── antigravity.sh          #   Antigravity CLI の導入と設定の部分更新
 │   ├── copy.sh                 #   設定ファイルコピー関数 (copy.conf を読み込む)
 │   ├── docker.sh               #   Docker Desktop 自動起動とディスク保守 LaunchAgent の適用
 │   ├── defaults.sh             #   macOS defaults と Spotlight 除外の適用
@@ -32,6 +33,7 @@
 ├── Pythonfile                  # uv 経由で導入する Python パッケージ定義 (python-pptx 等)
 ├── Vscodefile                  # Visual Studio Code 拡張一覧
 ├── .config/
+│   ├── antigravity/settings.json # 追加クレジット消費とデータ収集の設定
 │   ├── fish/                   # Fish Shell 設定
 │   │   ├── config.fish         #   メイン設定 (PATH, alias)
 │   │   ├── fish_plugins        #   Fisher プラグイン一覧
@@ -84,7 +86,8 @@ dotfiles 側では扱わない。詳細は claude.codex の `install.sh` と `do
 
 | スクリプト | 役割 |
 |-----------|------|
-| `install.sh` | 初回セットアップと日常更新の単一エントリポイント。Brewfile 適用 / 更新、設定ファイルコピー、Git ローカル設定の対話的入力、AWS 設定の再展開、Claude Code / Herdr / Herdr plugin / mkcert / Fisher / Terraform / npm / Backlog.md / Playwright browser binary / Python tools の同期、macOS defaults と Spotlight 除外の適用、日次メンテナンス LaunchAgent 登録を行う。第 1 引数で MODE (`orca` / `herdr` / `gws` / `python` / `npm` / `backlog` / `playwright` / `vscode` / `fish` / `docker` / `maintenance` / `spotlight`) を指定するとそのモジュールだけ再実行する |
+| `install.sh` | 初回セットアップと日常更新の単一エントリポイント。Brewfile 適用 / 更新、設定ファイルコピー、Git ローカル設定の対話的入力、AWS 設定の再展開、Claude Code / Herdr / Herdr plugin / mkcert / Fisher / Terraform / npm / Backlog.md / Playwright browser binary / Python tools の同期、macOS defaults と Spotlight 除外の適用、日次メンテナンス LaunchAgent 登録を行う。第 1 引数で MODE (`antigravity` / `orca` / `herdr` / `gws` / `python` / `npm` / `backlog` / `playwright` / `vscode` / `fish` / `docker` / `maintenance` / `spotlight`) を指定するとそのモジュールだけ再実行する |
+| `lib/antigravity.sh` | Brewfile から Antigravity CLI だけを導入し、管理する設定項目を利用者の設定へ反映する |
 | `lib/herdr.sh` | Herdr 本体の存在確認、Herdrfile の plugin 同期、Herdr 専用 mode の設定コピーを行う。版不一致は非破壊の警告として扱い、`all` では後続の dotfiles 同期を継続する |
 | `scripts/docker-disk-maintenance.sh` | Docker Desktop の `Docker.raw` とホスト空き容量を確認し、古い build cache と未使用 image / stopped container / unused network を削除する。volume は削除しない |
 | `scripts/cleanup-local-disk.sh` | Codex Crashpad dump、crude-morning-report の SQLite backup、aws-cliniconnect-terraform の `.terraform` cache、Homebrew cache を整理する。既定は dry-run、日次メンテナンスでは `--apply` で実行する |
@@ -99,6 +102,31 @@ dotfiles 側では扱わない。詳細は claude.codex の `install.sh` と `do
 | `scripts/check-tmux-safety.sh` | server-wide kill が `-S` / `-L` なしで記述されていないかを検出する。`lint.sh` と pre-commit hook から実行する |
 
 `install.sh` は冪等。何度実行しても安全。
+
+## Antigravity CLI の設定同期
+
+`Brewfile` が `antigravity-cli` cask を管理し、`lib/antigravity.sh` が導入と設定の適用を担当する。
+`./install.sh antigravity` は対象 cask だけを導入する。
+引数なしの `./install.sh` は Homebrew 全体の適用後に Antigravity CLI の設定を同期する。
+Google アカウントへのログインは手動で行い、スクリプトでは実行しない。
+
+管理元は `.config/antigravity/settings.json`、適用先は `~/.gemini/antigravity-cli/settings.json`。
+管理元には次の4項目を置く。
+
+| 設定項目 | 管理値 | CLI の設定画面 |
+|----------|--------|----------------|
+| `useG1Credits` | `false` | `Use AI Credits: off`（利用枠超過時の追加クレジット消費を止める） |
+| `enableTelemetry` | `false` | `Enable Telemetry: off`（データ収集を止める） |
+| `enableTerminalSandbox` | `true` | `Sandbox Mode: on`（シェルコマンドの実行範囲を制限する） |
+| `toolPermission` | `"request-review"` | `Tool Permission: request-review`（ツール実行の承認を求める） |
+
+同期処理は既存 JSON を読み、管理元のキーだけを更新して書き戻す。
+CLI が保存する他の設定を保持するため、`copy.conf` によるファイル全体の置き換えは使わない。
+認証情報は CLI 側で管理し、リポジトリには取り込まない。
+
+CLI 1.1.27 の初期設定と設定保存では、適用先から `useG1Credits` が省略される動作を確認している。
+項目の有無だけで有効状態を判断せず、初期設定後と再適用後は `/settings` の表示で確認する。
+導入とログインの操作は [README](../README.md#antigravity-cli) を参照。
 
 ## PATH 管理
 
@@ -124,6 +152,7 @@ MODE を追加・変更する場合、認証情報や手動ログインなど re
 | MODE | 内容 |
 |------|------|
 | (none / `all`) | 全モジュールを順に走らせる。以下の専用 MODE の導入・同期内容をすべて含める |
+| `antigravity` | Brewfile の `antigravity-cli` だけを `brew bundle --no-upgrade` で導入し、管理する設定を適用。導入済みの版は更新しない |
 | `herdr` | Herdr 本体確認、Herdr 設定ファイルコピー、`Herdrfile` の plugin 同期。同期失敗は専用 mode の終了codeへ反映 |
 | `gws` | `update_gws` (未導入なら install、導入済みなら brew outdated 判定) |
 | `python` | `ensure_python_tools` (`Pythonfile` を `~/.local/share/dotfiles/python-site/<X.Y>` へ `uv pip install --target` し、user site の `.pth` で素の python3 に載せる。python の minor 更新は state 比較で検出して入れ直す) |

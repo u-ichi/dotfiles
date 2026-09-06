@@ -1,4 +1,6 @@
 {
   "useG1Credits": false,
-  "enableTelemetry": false
+  "enableTelemetry": false,
+  "enableTerminalSandbox": true,
+  "toolPermission": "request-review"
 }
