@@ -35,13 +35,13 @@ function __codex_sync_repo_on_startup --argument-names repo
     set -l branch (git -C "$repo" branch --show-current 2>/dev/null)
     if test "$branch" = main
         echo "main を最新に pull しています..."
-        if not git -C "$repo" pull --ff-only origin main 2>/dev/null
-            echo "⚠ pull に失敗しました（オフラインまたはコンフリクト）。現在の状態で続行します。"
+        if not git -C "$repo" pull --ff-only origin main
+            echo "⚠ pull に失敗しました。上のエラー詳細を確認してください。現在の状態で続行します。"
         end
     else
         echo "origin/main を取得しています..."
-        if not git -C "$repo" fetch origin main 2>/dev/null
-            echo "⚠ fetch に失敗しました（オフライン等）。現在の状態で続行します。"
+        if not git -C "$repo" fetch origin main
+            echo "⚠ fetch に失敗しました。上のエラー詳細を確認してください。現在の状態で続行します。"
         end
     end
 end
