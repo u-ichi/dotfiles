@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Backlog.md を main HEAD からビルドして管理する
+# Backlog.mdを公式main、または管理patchの指定版からビルドして配置する
 
 backlog_binary_is_valid() {
   local bin="$1"
@@ -33,15 +33,72 @@ cleanup_backlog_npm_shadow() {
   echo "済み:     backlog → $resolved_bin"
 }
 
+backlog_use_existing_binary() {
+  local bin="$1"
+  local bin_dir="$2"
+  local reason="$3"
+
+  if backlog_binary_is_valid "$bin"; then
+    echo "警告: ${reason}。既存バイナリを使用します"
+    cleanup_backlog_npm_shadow "$bin" "$bin_dir"
+    return $?
+  fi
+
+  echo "エラー: ${reason}、利用可能な既存バイナリもありません"
+  return 1
+}
+
+backlog_read_manifest() {
+  local manifest="$1"
+
+  bun -e '
+    const manifest = JSON.parse(await Bun.file(process.argv[1]).text());
+    const validBase = typeof manifest.base_commit === "string" && /^[0-9a-fA-F]{40}$/.test(manifest.base_commit);
+    const validPatches = Array.isArray(manifest.patches) && manifest.patches.every((patch) => {
+      if (typeof patch !== "string" || patch.length === 0 || /[\t\r\n]/.test(patch) || patch.startsWith("/")) {
+        return false;
+      }
+      return patch.split("/").every((part) => part !== "" && part !== "." && part !== "..");
+    });
+    if (!validBase || !validPatches) {
+      process.exit(1);
+    }
+    process.stdout.write([manifest.base_commit, ...manifest.patches].join("\n"));
+  ' "$manifest"
+}
+
+backlog_manifest_digest() {
+  git hash-object -- "$1"
+}
+
+backlog_patch_digest() (
+  local patch_dir="$1"
+  shift
+  local patch_name
+
+  for patch_name in "$@"; do
+    printf '%s\n' "$patch_name"
+    git hash-object -- "$patch_dir/$patch_name"
+  done | git hash-object --stdin
+)
+
 ensure_backlog_head() (
   local src_dir="${BACKLOG_MD_SRC_DIR:-$HOME/.local/share/backlog.md}"
   local bin_dir="${BACKLOG_MD_BIN_DIR:-$HOME/.local/bin}"
   local bin="$bin_dir/backlog"
   local marker="${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles/backlog/installed-commit"
+  local patch_dir="${BACKLOG_MD_PATCH_DIR:-$HOME/.config/backlog-md/managed}"
+  local manifest_path="$patch_dir/manifest.json"
   local recipe="1"
   local marker_dir lock_file lock_pid
-  local origin_url remote_sha marker_value pkg_version short_sha src_dir_real repo_root_real
+  local origin_url remote_sha marker_value marker_expected
+  local pkg_version short_sha src_dir_real repo_root_real
+  local manifest_data base_commit manifest_digest patches_digest
+  local build_dir="" build_src_dir build_sha
+  local patch_name patch_path
+  local managed_manifest=0
   local tmp_bin tmp_marker
+  local -a patch_names=()
 
   if ! command -v git &>/dev/null; then
     echo "エラー: git が見つかりません。Brewfile を反映してから再実行してください"
@@ -70,10 +127,50 @@ ensure_backlog_head() (
     return 1
   fi
   trap '
+    if [ -n "$build_dir" ]; then
+      rm -rf "$build_dir"
+    fi
     if [ "$(cat "$lock_file" 2>/dev/null)" = "'"$lock_pid"'" ]; then
       rm -f "$lock_file"
     fi
   ' EXIT
+
+  if [ -e "$manifest_path" ]; then
+    managed_manifest=1
+    if [ ! -f "$manifest_path" ]; then
+      backlog_use_existing_binary "$bin" "$bin_dir" \
+        "Backlog.md の managed manifest が通常ファイルではありません: $manifest_path"
+      return $?
+    fi
+    if ! manifest_data="$(backlog_read_manifest "$manifest_path")"; then
+      backlog_use_existing_binary "$bin" "$bin_dir" \
+        "Backlog.md の managed manifest を読み取れませんでした: $manifest_path"
+      return $?
+    fi
+    base_commit="$(printf '%s\n' "$manifest_data" | sed -n '1p')"
+    while IFS= read -r patch_name; do
+      [ -n "$patch_name" ] || continue
+      patch_names[${#patch_names[@]}]="$patch_name"
+    done < <(printf '%s\n' "$manifest_data" | sed '1d')
+    for patch_name in "${patch_names[@]}"; do
+      patch_path="$patch_dir/$patch_name"
+      if [ ! -f "$patch_path" ]; then
+        backlog_use_existing_binary "$bin" "$bin_dir" \
+          "Backlog.md の managed patch が見つかりません: $patch_path"
+        return $?
+      fi
+    done
+    if ! manifest_digest="$(backlog_manifest_digest "$manifest_path")"; then
+      backlog_use_existing_binary "$bin" "$bin_dir" \
+        "Backlog.md の managed manifest の digest を計算できませんでした"
+      return $?
+    fi
+    if ! patches_digest="$(backlog_patch_digest "$patch_dir" "${patch_names[@]}")"; then
+      backlog_use_existing_binary "$bin" "$bin_dir" \
+        "Backlog.md の managed patch の digest を計算できませんでした"
+      return $?
+    fi
+  fi
 
   if [ ! -e "$src_dir" ]; then
     echo "取得:     Backlog.md"
@@ -117,26 +214,66 @@ ensure_backlog_head() (
   fi
 
   remote_sha="$(git -C "$src_dir" rev-parse origin/main)"
+  if [ "$managed_manifest" -eq 1 ]; then
+    if ! build_sha="$(git -C "$src_dir" rev-parse "${base_commit}^{commit}" 2>/dev/null)"; then
+      backlog_use_existing_binary "$bin" "$bin_dir" \
+        "Backlog.md の managed base commit が source clone にありません: $base_commit"
+      return $?
+    fi
+    base_commit="$build_sha"
+    marker_expected="$base_commit recipe=$recipe manifest_digest=$manifest_digest patches_digest=$patches_digest"
+  else
+    build_sha="$remote_sha"
+    marker_expected="$remote_sha recipe=$recipe"
+  fi
   marker_value="$(cat "$marker" 2>/dev/null || true)"
-  if [ "$marker_value" = "$remote_sha recipe=$recipe" ] && backlog_binary_is_valid "$bin"; then
-    echo "済み:     Backlog.md ($remote_sha)"
+  if [ "$marker_value" = "$marker_expected" ] && backlog_binary_is_valid "$bin"; then
+    echo "済み:     Backlog.md ($build_sha)"
     cleanup_backlog_npm_shadow "$bin" "$bin_dir"
     return $?
   fi
 
-  if ! git -C "$src_dir" reset --hard origin/main; then
-    echo "エラー: Backlog.md を origin/main へ揃えられませんでした"
-    return 1
+  build_src_dir="$src_dir"
+  if [ "$managed_manifest" -eq 1 ]; then
+    if ! build_dir="$(mktemp -d "${TMPDIR:-/tmp}/backlog-md-build.XXXXXX")"; then
+      backlog_use_existing_binary "$bin" "$bin_dir" \
+        "Backlog.md の managed build directory を作成できませんでした"
+      return $?
+    fi
+    if ! git -C "$src_dir" archive --format=tar "$build_sha" | tar -xf - -C "$build_dir"; then
+      backlog_use_existing_binary "$bin" "$bin_dir" \
+        "Backlog.md の managed base commit を一時 build directory へ展開できませんでした"
+      return $?
+    fi
+    for patch_name in "${patch_names[@]}"; do
+      patch_path="$patch_dir/$patch_name"
+      if ! git -C "$build_dir" apply -- "$patch_path"; then
+        backlog_use_existing_binary "$bin" "$bin_dir" \
+          "Backlog.md の managed patch を適用できませんでした: $patch_name"
+        return $?
+      fi
+    done
+    build_src_dir="$build_dir"
+  else
+    if ! git -C "$src_dir" reset --hard origin/main; then
+      echo "エラー: Backlog.md を origin/main へ揃えられませんでした"
+      return 1
+    fi
   fi
 
-  pkg_version="$(bun -e 'process.stdout.write(require(process.argv[1]).version)' "$src_dir/package.json" 2>/dev/null || true)"
+  pkg_version="$(bun -e 'process.stdout.write(require(process.argv[1]).version)' "$build_src_dir/package.json" 2>/dev/null || true)"
   if [ -z "$pkg_version" ]; then
+    if [ "$managed_manifest" -eq 1 ]; then
+      backlog_use_existing_binary "$bin" "$bin_dir" \
+        "Backlog.md の managed source から package.json の version を取得できませんでした"
+      return $?
+    fi
     echo "エラー: Backlog.md の package.json から version を取得できません"
     return 1
   fi
-  short_sha="$(git -C "$src_dir" rev-parse --short "$remote_sha")"
+  short_sha="$(git -C "$src_dir" rev-parse --short "$build_sha")"
   if ! (
-    cd "$src_dir" || exit 1
+    cd "$build_src_dir" || exit 1
     bun install --frozen-lockfile || exit 1
     # Bun 1.3.14 では trustedDependencies に含まれる bun の postinstall が
     # 実行されず、node_modules/.bin/bun が失敗用のプレースホルダのままになる場合がある。
@@ -155,24 +292,34 @@ ensure_backlog_head() (
     return 1
   fi
 
-  if [ ! -f "$src_dir/dist/backlog" ]; then
+  if [ ! -f "$build_src_dir/dist/backlog" ]; then
+    if [ "$managed_manifest" -eq 1 ]; then
+      backlog_use_existing_binary "$bin" "$bin_dir" \
+        "Backlog.md の managed build 成果物が見つかりません"
+      return $?
+    fi
     echo "エラー: Backlog.md のビルド成果物が見つかりません"
     return 1
   fi
 
   mkdir -p "$bin_dir"
   tmp_bin="$(mktemp "$bin_dir/.backlog.XXXXXX")"
-  if ! cp "$src_dir/dist/backlog" "$tmp_bin" || ! chmod 755 "$tmp_bin" || ! "$tmp_bin" --version >/dev/null 2>&1; then
+  if ! cp "$build_src_dir/dist/backlog" "$tmp_bin" || ! chmod 755 "$tmp_bin" || ! "$tmp_bin" --version >/dev/null 2>&1; then
     rm -f "$tmp_bin"
+    if [ "$managed_manifest" -eq 1 ]; then
+      backlog_use_existing_binary "$bin" "$bin_dir" \
+        "Backlog.md の managed build 成果物を検証できませんでした"
+      return $?
+    fi
     echo "エラー: Backlog.md バイナリの検証に失敗しました"
     return 1
   fi
   mv "$tmp_bin" "$bin"
 
   tmp_marker="$(mktemp "$(dirname "$marker")/.installed-commit.XXXXXX")"
-  printf '%s recipe=%s\n' "$remote_sha" "$recipe" > "$tmp_marker"
+  printf '%s\n' "$marker_expected" > "$tmp_marker"
   mv "$tmp_marker" "$marker"
-  echo "更新:     Backlog.md ($remote_sha)"
+  echo "更新:     Backlog.md ($build_sha)"
 
   cleanup_backlog_npm_shadow "$bin" "$bin_dir"
 )

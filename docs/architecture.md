@@ -87,6 +87,7 @@ dotfiles 側では扱わない。詳細は claude.codex の `install.sh` と `do
 | スクリプト | 役割 |
 |-----------|------|
 | `install.sh` | 初回セットアップと日常更新の単一エントリポイント。Brewfile 適用 / 更新、設定ファイルコピー、Git ローカル設定の対話的入力、AWS 設定の再展開、Claude Code / Herdr / Herdr plugin / mkcert / Fisher / Terraform / npm / Backlog.md / Playwright browser binary / Python tools の同期、macOS defaults と Spotlight 除外の適用、日次メンテナンス LaunchAgent 登録を行う。第 1 引数で MODE (`antigravity` / `orca` / `herdr` / `gws` / `python` / `npm` / `backlog` / `playwright` / `vscode` / `fish` / `docker` / `maintenance` / `spotlight`) を指定するとそのモジュールだけ再実行する |
+| `lib/backlog.sh` | Backlog.md の公式 `origin` を確認し、通常は `origin/main` を取得してビルドする。managed manifest がある場合は指定した base commit を一時展開し、管理済み patch を順番に適用してビルドする |
 | `lib/antigravity.sh` | Brewfile から Antigravity CLI だけを導入し、管理する設定項目を利用者の設定へ反映する |
 | `lib/herdr.sh` | Herdr 本体の存在確認、Herdrfile の plugin 同期、Herdr 専用 mode の設定コピーを行う。版不一致は非破壊の警告として扱い、`all` では後続の dotfiles 同期を継続する |
 | `scripts/docker-disk-maintenance.sh` | Docker Desktop の `Docker.raw` とホスト空き容量を確認し、古い build cache と未使用 image / stopped container / unused network を削除する。volume は削除しない |
@@ -165,6 +166,23 @@ MODE を追加・変更する場合、認証情報や手動ログインなど re
 | `docker` | Docker Desktop AutoStart を有効化し、`docker-disk-maintenance` と LaunchAgent を同期 |
 | `maintenance` | `dotfiles-daily-maintenance` / `dotfiles-cleanup-local-disk` の配置、`~/.config/dotfiles-maintenance/env` テンプレート作成、日次 LaunchAgent 登録 |
 | `spotlight` | (1) `scripts/disable-spotlight-indexing.sh` を `$HOME/.local/bin/disable-spotlight-indexing` へコピー（索引停止の `apply` は配布のみで暗黙実行しない）(2) Google Drive 内の `Obsidian/u1memo` を検出し、`.git` / `.obsidian` / `Daily/attachments` に `.metadata_never_index` を冪等配置 |
+
+### Backlog.md の managed patch
+
+通常の `backlog` mode は、公式 `origin` の `main` を source clone に取得し、その作業ツリーを `origin/main` へ揃えてから Bun でビルドする。managed patch を使う場合は、既定の `$HOME/.config/backlog-md/managed/manifest.json`（test では `BACKLOG_MD_PATCH_DIR` で変更可能）に次の形式を置く。
+
+```json
+{
+  "base_commit": "05fbbdd39a8d009e0d8b40a1e7f241c2c8407c0f",
+  "patches": ["backlog-local.patch"]
+}
+```
+
+`base_commit` は 40 桁の Git commit、`patches` は managed directory からの相対 patch file 名である。manifest がある時は、その commit を `git archive` で一時 build directory へ展開し、patch を配列の順番で適用してから既存の Bun build と原子的な binary 配置を行う。source clone は hard reset しないため、source clone にある未 commit の変更を消さない。`origin` は公式 Backlog.md repository のまま保つ。
+
+installed marker には base commit、recipe、manifest の digest、patch 内容の digest を記録する。manifest または patch が変わると再ビルドし、patch の不足・適用失敗・build 失敗・成果物検証失敗時は利用可能な既存 binary を保持して警告を表示する。この場合は成功扱いの marker を書かず、patch を省略して公式版へ切り替えない。
+
+managed patch を使用している間は manifest の `base_commit` に対応する版へ固定される。現在の managed base は `05fbbdd39a8d009e0d8b40a1e7f241c2c8407c0f` であり、上流の `main` が進んでも自動でその版を置き換えない。manifest がない場合は、従来の `origin/main` 取得・reset・build 経路を使う。
 
 各モジュールは個別失敗が他に波及しないよう、`lib/<name>.sh` 内で必要なツールの有無
 (`command -v`) を先頭で確認する。`Brewfile` には依存ツール (uv / googleworkspace-cli /
