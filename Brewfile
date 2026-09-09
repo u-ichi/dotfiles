@@ -3,6 +3,7 @@ cask_args appdir: "/Applications"
 # === 非公式 tap ===
 # Homebrew 公式に無い macOS アプリ用の tap
 # cask の追加・更新は dotfiles 側の pkg-add / cask-update skill で行う
+tap 'dicklesworthstone/tap'
 tap 'u-ichi/tap'
 tap 'manaflow-ai/cmux'
 tap 'terraform-linters/tap'
@@ -21,6 +22,8 @@ cask 'antigravity-cli'
 brew 'bash'
 brew 'bun'
 brew 'cargo-nextest'
+brew 'ccusage'
+brew 'dicklesworthstone/tap/cass'
 brew 'direnv'
 brew 'docker-compose'
 brew 'fish'

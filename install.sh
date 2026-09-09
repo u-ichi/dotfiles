@@ -37,6 +37,14 @@ update_npm_globals() {
   fi
 }
 
+# Brewfileに登録した非公式formulaだけを信頼対象にする。
+trust_brewfile_formulas() {
+  local formula
+  while IFS= read -r formula; do
+    brew trust --formula "$formula"
+  done < <(sed -n "s/^brew '\([^']*\/[^']*\/[^']*\)'$/\1/p" "$1")
+}
+
 sync_homebrew() {
   if ! command -v brew &>/dev/null; then
     echo "エラー: Homebrew がインストールされていません"
@@ -52,6 +60,7 @@ sync_homebrew() {
   # `brew trust` は idempotent (既に trusted なら何もしない)。
   brew trust --tap u-ichi/tap 2>/dev/null || true
 
+  trust_brewfile_formulas "$SCRIPT_DIR/Brewfile"
   brew bundle --file="$SCRIPT_DIR/Brewfile"
   brew cleanup
   echo ""
@@ -173,6 +182,27 @@ restore_fisher_plugins() {
   echo ""
 }
 
+# 指定したformulaだけをBrewfileから適用する。
+if [ "$MODE" = "brew" ]; then
+  shift
+  if [ "$#" -eq 0 ]; then
+    echo "使い方: $0 brew <Brewfileに登録したformula>..." >&2
+    exit 1
+  fi
+  mkdir -p "$SCRIPT_DIR/tmp"
+  selected_brewfile="$(mktemp "$SCRIPT_DIR/tmp/brew-selected.XXXXXX")"
+  trap 'rm -f "$selected_brewfile"' EXIT
+  for package in "$@"; do
+    if ! grep -Fx "brew '$package'" "$SCRIPT_DIR/Brewfile" >> "$selected_brewfile"; then
+      echo "エラー: Brewfile に $package が登録されていません" >&2
+      exit 1
+    fi
+  done
+  trust_brewfile_formulas "$selected_brewfile"
+  brew bundle --file="$selected_brewfile" --no-upgrade
+  exit 0
+fi
+
 if [ "$MODE" = "antigravity" ]; then
   ensure_antigravity
   sync_antigravity_settings
@@ -279,7 +309,7 @@ fi
 
 if [ "$MODE" != "all" ]; then
   echo "エラー: 未知の MODE です: $MODE"
-  echo "利用可能: all, antigravity, orca, herdr, gws, python, npm, backlog, playwright, vscode, fish, karabiner, docker, maintenance, spotlight"
+  echo "利用可能: all, brew, antigravity, orca, herdr, gws, python, npm, backlog, playwright, vscode, fish, karabiner, docker, maintenance, spotlight"
   exit 1
 fi
 

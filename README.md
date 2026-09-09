@@ -27,6 +27,12 @@ Fish 設定と Fisher プラグインだけを復元する場合:
 ./install.sh fish
 ```
 
+Brewfile に登録した CLI だけを導入する場合:
+
+```bash
+./install.sh brew dicklesworthstone/tap/cass ccusage
+```
+
 日次メンテナンスだけを同期し直す場合:
 
 ```bash
