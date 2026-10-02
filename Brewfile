@@ -112,6 +112,7 @@ cask 'applite'
 cask 'betterdisplay'
 cask 'bitwarden'
 cask 'caffeine'
+cask 'deskpad'
 cask 'istat-menus'
 cask 'karabiner-elements'
 # 通知バナー位置変更アプリ。公式 1.4.0 は macOS 26.4.1 必須のため、現行 26.3 で動く

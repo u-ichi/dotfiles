@@ -182,18 +182,19 @@ restore_fisher_plugins() {
   echo ""
 }
 
-# 指定したformulaだけをBrewfileから適用する。
+# 指定したformula・caskだけをBrewfileから適用する。
 if [ "$MODE" = "brew" ]; then
   shift
   if [ "$#" -eq 0 ]; then
-    echo "使い方: $0 brew <Brewfileに登録したformula>..." >&2
+    echo "使い方: $0 brew <Brewfileに登録したformula・cask>..." >&2
     exit 1
   fi
   mkdir -p "$SCRIPT_DIR/tmp"
   selected_brewfile="$(mktemp "$SCRIPT_DIR/tmp/brew-selected.XXXXXX")"
   trap 'rm -f "$selected_brewfile"' EXIT
+  grep '^cask_args ' "$SCRIPT_DIR/Brewfile" > "$selected_brewfile" || true
   for package in "$@"; do
-    if ! grep -Fx "brew '$package'" "$SCRIPT_DIR/Brewfile" >> "$selected_brewfile"; then
+    if ! grep -Fx -e "brew '$package'" -e "cask '$package'" "$SCRIPT_DIR/Brewfile" >> "$selected_brewfile"; then
       echo "エラー: Brewfile に $package が登録されていません" >&2
       exit 1
     fi
