@@ -30,7 +30,7 @@ allowed-tools: Bash(brew *) Bash(npm *) Bash(fisher *) Bash(fish *) Bash(bash *)
 | Homebrew cask (フォント) | `Brewfile` | `cask 'font-<name>'` | `install.sh` → `brew bundle` |
 | Homebrew 非公式 cask (個人 tap) | `projects/homebrew-tap/Casks/<name>.rb` + `Brewfile` | Cask Ruby DSL + `cask 'u-ichi/tap/<name>'` | tap に push → `install.sh` → `brew bundle` |
 | npm グローバル | `Npmfile` | 1行1パッケージ名 | `install.sh` → `npm install -g` |
-| Node.js の版 (プロジェクトの `.node-version` 用) | `Nodefile` | 1行1版 (例: `24.19.0`) | `install.sh node` → `nodenv install --skip-existing` |
+| Node.js の版 (プロジェクトの `.node-version` / `.nvmrc` 用) | `Nodefile` | 1行1版 (例: `24.19.0`、系列指定 `22`) | `install.sh node` → `mise install node@<版>` |
 | git ソースビルド (Backlog.md 専用) | `lib/backlog.sh` | `ensure_backlog_head` 関数 | `install.sh backlog` で適用 |
 | Fisher プラグイン | `.config/fish/fish_plugins` | 1行1リポジトリパス | `fisher install` 後に自動更新 |
 
@@ -98,9 +98,9 @@ npm info <package-name> --json 2>/dev/null | head -20
 
 #### Nodefile
 
-- 1行1版 (`nodenv install --list` に出る完全な版番号)、用途をコメントで添える
+- 1行1版 (`mise ls-remote node` に出る版番号、または `22` のような系列指定)、用途をコメントで添える
 - `#` で始まる行はコメント
-- `nodenv global` は変えない。版を使うプロジェクト側の `.node-version` と一致させる
+- mise の global tool には登録しない。版を使うプロジェクト側の `.node-version` / `.nvmrc` が解決できる版を書く
 
 #### fish_plugins
 

@@ -1,0 +1,9 @@
+# mise のグローバル設定 (コピー先: ~/.config/mise/config.toml)
+# Node.js の版は Nodefile で導入し、プロジェクトの .node-version / .nvmrc で切り替える。
+# [tools] は置かない。版指定の無い場所では shims が PATH 上の次の node (Homebrew) へ fallback する。
+
+[settings]
+# mise は .node-version / .nvmrc などの言語固有の版ファイルを既定では読まないため、node だけ有効にする。
+idiomatic_version_file_enable_tools = ["node"]
+# 未導入の版を要求された時に自動ダウンロードしない。導入は Nodefile と ./install.sh node に限定する。
+not_found_auto_install = false

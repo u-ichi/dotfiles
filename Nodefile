@@ -1,5 +1,8 @@
-# nodenv で導入する Node.js の版 (1行1版、# 行はコメント)
-# 既定の版 (nodenv global) は変えず、.node-version を置くプロジェクトでだけ使われる。
+# mise で導入する Node.js の版 (1行1版、# 行はコメント)
+# 各行を `mise install node@<版>` に渡す。`22` のような系列指定はその系列の最新版を導入する。
+# 既定の node (Homebrew) は変えず、.node-version / .nvmrc を置くプロジェクトでだけ使われる。
 
 # dot-request-dashboard 用 (.node-version = 24.19.0)
 24.19.0
+# clinial-co-jp (.node-version = 22)、cohort-explorer (.nvmrc = 22) 用
+22
