@@ -192,21 +192,21 @@ managed patch を使用している間は manifest の `base_commit` に対応�
 
 各モジュールは個別失敗が他に波及しないよう、`lib/<name>.sh` 内で必要なツールの有無
 (`command -v`) を先頭で確認する。`Brewfile` には依存ツール (uv / googleworkspace-cli /
-ffmpeg / bun) を明示し、`Nodefile` / `Npmfile` / `Pythonfile` は各 lib/ が読む形式で行単位に列挙する。
+ffmpeg / bun) を明示し、`Nodefile`、`Npmfile`、`Pythonfile` は各 lib/ が読み込む形式で行ごとに列挙する。
 
-`Nodefile` は `mise` (Brewfile で管理) に導入する Node.js の版を 1 行 1 版で列挙する。
-`22` のような系列指定も書け、その系列の最新版が入る。プロジェクトの `.node-version` /
-`.nvmrc` が要求する版を揃えるためのもので、mise の global tool (`[tools]`) には登録しない。
+`Nodefile` は `mise` (Brewfile で管理) に導入する Node.js の版を 1 行につき 1 版ずつ列挙する。
+`22` のような系列指定も記述でき、その系列の最新版が入る。プロジェクトの `.node-version` や
+`.nvmrc` が要求する版を揃えるための定義であり、mise の global tool (`[tools]`) には登録しない。
 `mise` の shims を PATH の先頭に置くことで、版ファイルのあるディレクトリではその版
 (`22` は導入済みの 22.x) に解決され、版ファイルのない場所では shims が PATH 上の次の
 `node` (Homebrew の `node`) へ fallback する。
 
 mise の設定は `.config/mise/config.toml` (コピー先 `~/.config/mise/config.toml`) に置く。
-mise は `.node-version` 等の言語固有の版ファイルを既定では読まないため
+mise は `.node-version` などの言語固有の版ファイルを既定では読み込まないため、
 `idiomatic_version_file_enable_tools = ["node"]` で node だけ有効にし、
 `not_found_auto_install = false` で未導入の版の自動ダウンロードを止める。
 版ファイルの版が `Nodefile` にない (= 未導入) 場合も shims は Homebrew の `node` へ fallback
-するので、要求どおりの版を使うには `Nodefile` へ足して `./install.sh node` を実行する。
+するため、要求どおりの版を使うには `Nodefile` に追記して `./install.sh node` を実行する。
 
 `Pythonfile` の導入先は専用 venv ではなく、`~/.local/share/dotfiles/python-site/<X.Y>`
 (dotfiles 専用 dir) で、これを `command -v python3` が指す python の user site へ置く
