@@ -1,0 +1,5 @@
+# nodenv で導入する Node.js の版 (1行1版、# 行はコメント)
+# 既定の版 (nodenv global) は変えず、.node-version を置くプロジェクトでだけ使われる。
+
+# dot-request-dashboard 用 (.node-version = 24.19.0)
+24.19.0
