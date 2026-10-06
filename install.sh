@@ -10,6 +10,7 @@ source "$SCRIPT_DIR/lib/defaults.sh"
 source "$SCRIPT_DIR/lib/docker.sh"
 source "$SCRIPT_DIR/lib/aws.sh"
 source "$SCRIPT_DIR/lib/terraform.sh"
+source "$SCRIPT_DIR/lib/node.sh"
 source "$SCRIPT_DIR/lib/herdr.sh"
 source "$SCRIPT_DIR/lib/gws.sh"
 source "$SCRIPT_DIR/lib/python.sh"
@@ -241,6 +242,12 @@ if [ "$MODE" = "python" ]; then
   exit 0
 fi
 
+if [ "$MODE" = "node" ]; then
+  ensure_node_versions
+  echo "完了しました"
+  exit 0
+fi
+
 if [ "$MODE" = "npm" ]; then
   update_npm_globals
   echo "完了しました"
@@ -310,7 +317,7 @@ fi
 
 if [ "$MODE" != "all" ]; then
   echo "エラー: 未知の MODE です: $MODE"
-  echo "利用可能: all, brew, antigravity, orca, herdr, gws, python, npm, backlog, playwright, vscode, fish, karabiner, docker, maintenance, spotlight"
+  echo "利用可能: all, brew, antigravity, orca, herdr, gws, python, node, npm, backlog, playwright, vscode, fish, karabiner, docker, maintenance, spotlight"
   exit 1
 fi
 
@@ -434,6 +441,9 @@ mkcert -install 2>/dev/null || true
 echo "--- Terraform ---"
 ensure_terraform_latest
 echo ""
+
+# === Node.js の版 (nodenv) ===
+ensure_node_versions
 
 # === npm グローバルパッケージ ===
 update_npm_globals

@@ -1,5 +1,7 @@
 # Herdr の vendored libghostty-vt は Zig 0.15.2 固定。versioned formula は keg-only のため明示する。
-fish_add_path /opt/homebrew/opt/zig@0.15/bin /opt/homebrew/bin ~/.local/bin
+# nodenv の shims は .node-version を置くプロジェクトで Nodefile の版へ切り替えるため最前列に置く。
+# .node-version の無い場所では nodenv が system (次に見つかる /opt/homebrew/bin/node) へ解決する。
+fish_add_path ~/.nodenv/shims /opt/homebrew/opt/zig@0.15/bin /opt/homebrew/bin ~/.local/bin
 
 # SSH 経由では接続元の Ghostty TERM が渡るが、接続先に terminfo が無い場合がある。
 # tmux は起動前の TERM を参照するため、未知なら広く入っている xterm-256color に落とす。
