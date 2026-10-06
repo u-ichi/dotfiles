@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# nodenv 経由で Nodefile に列挙した Node.js の版を導入する
+# mise 経由で Nodefile に列挙した Node.js の版を導入する
 #
-# プロジェクトの .node-version が要求する版を揃えるためのもので、既定の版 (nodenv global)
-# は変えない。.node-version の無い場所では nodenv の system 解決で従来の node が使われる。
+# プロジェクトの .node-version / .nvmrc が要求する版を揃えるためのもので、mise の global tool
+# には登録しない。版指定の無い場所では mise の shims が PATH 上の次の node (Homebrew) へ fallback する。
 
 ensure_node_versions() {
   local nodefile="$SCRIPT_DIR/Nodefile"
@@ -11,17 +11,18 @@ ensure_node_versions() {
     return 0
   fi
 
-  if ! command -v nodenv &>/dev/null; then
-    echo "スキップ: nodenv がインストールされていません"
+  if ! command -v mise &>/dev/null; then
+    echo "スキップ: mise がインストールされていません"
     return 0
   fi
 
-  echo "--- Node.js (nodenv) ---"
+  echo "--- Node.js (mise) ---"
   while IFS= read -r version || [ -n "$version" ]; do
     [[ -z "$version" || "$version" =~ ^# ]] && continue
-    echo "導入:     node $version"
-    nodenv install --skip-existing "$version"
+    echo "導入:     node@$version"
+    mise install "node@$version"
   done < "$nodefile"
-  echo "導入済み: $(nodenv versions --bare | tr '\n' ' ')"
+  echo "導入済み:"
+  mise ls --installed node
   echo ""
 }

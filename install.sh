@@ -442,7 +442,7 @@ echo "--- Terraform ---"
 ensure_terraform_latest
 echo ""
 
-# === Node.js の版 (nodenv) ===
+# === Node.js の版 (mise) ===
 ensure_node_versions
 
 # === npm グローバルパッケージ ===

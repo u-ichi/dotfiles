@@ -25,12 +25,12 @@
 │   ├── aws.sh                  #   AWS config を config.d パターンで組み立て
 │   ├── herdr.sh                #   Herdr 本体確認と plugin 同期
 │   ├── gws.sh                  #   Google Workspace CLI (gws) の明示導入・更新補助
-│   ├── node.sh                 #   Nodefile の Node.js 版を nodenv で導入 (global は変えない)
+│   ├── node.sh                 #   Nodefile の Node.js 版を mise で導入 (global tool には登録しない)
 │   ├── orca.sh                 #   HW フォント導入と Orca のフォント設定適用
 │   ├── python.sh               #   Pythonfile を素の python3 から import できる形で同期
 │   └── maintenance.sh          #   日次メンテナンス LaunchAgent の同期
 ├── Brewfile                    # Homebrew パッケージ・cask 定義
-├── Nodefile                    # nodenv で導入する Node.js の版 (プロジェクトの .node-version 用)
+├── Nodefile                    # mise で導入する Node.js の版 (プロジェクトの .node-version / .nvmrc 用)
 ├── Npmfile                     # npm グローバルパッケージ定義
 ├── Pythonfile                  # uv 経由で導入する Python パッケージ定義 (python-pptx 等)
 ├── Vscodefile                  # Visual Studio Code 拡張一覧
@@ -41,6 +41,7 @@
 │   │   ├── fish_plugins        #   Fisher プラグイン一覧
 │   │   ├── completions/        #   補完定義 (gcloud, gsutil)
 │   │   └── functions/          #   カスタム関数 (claude/codex/ai-panes/sidebar 等、テーマ系は .gitignore)
+│   ├── mise/config.toml        # mise のグローバル設定 (.node-version / .nvmrc の読み取り、自動導入の無効化)
 │   ├── zsh/{zshenv,zprofile}   # zsh 起動時の Homebrew PATH 優先設定
 │   ├── bash/bash_profile       # bash login shell の Homebrew PATH 優先設定
 │   ├── git/config              # Git 設定 (共通、個人情報は config.local に分離)
@@ -88,7 +89,7 @@ dotfiles 側では扱わない。詳細は claude.codex の `install.sh` と `do
 
 | スクリプト | 役割 |
 |-----------|------|
-| `install.sh` | 初回セットアップと日常更新の単一エントリポイント。Brewfile 適用 / 更新、設定ファイルコピー、Git ローカル設定の対話的入力、AWS 設定の再展開、Claude Code / Herdr / Herdr plugin / mkcert / Fisher / Terraform / Node.js 版 (nodenv) / npm / Backlog.md / Playwright browser binary / Python tools の同期、macOS defaults と Spotlight 除外の適用、日次メンテナンス LaunchAgent 登録を行う。第 1 引数で MODE (`brew` / `antigravity` / `orca` / `herdr` / `gws` / `python` / `node` / `npm` / `backlog` / `playwright` / `vscode` / `fish` / `docker` / `maintenance` / `spotlight`) を指定するとそのモジュールだけ再実行する |
+| `install.sh` | 初回セットアップと日常更新の単一エントリポイント。Brewfile 適用 / 更新、設定ファイルコピー、Git ローカル設定の対話的入力、AWS 設定の再展開、Claude Code / Herdr / Herdr plugin / mkcert / Fisher / Terraform / Node.js 版 (mise) / npm / Backlog.md / Playwright browser binary / Python tools の同期、macOS defaults と Spotlight 除外の適用、日次メンテナンス LaunchAgent 登録を行う。第 1 引数で MODE (`brew` / `antigravity` / `orca` / `herdr` / `gws` / `python` / `node` / `npm` / `backlog` / `playwright` / `vscode` / `fish` / `docker` / `maintenance` / `spotlight`) を指定するとそのモジュールだけ再実行する |
 | `lib/backlog.sh` | Backlog.md の公式 `origin` を確認し、通常は `origin/main` を取得してビルドする。managed manifest がある場合は指定した base commit を一時展開し、管理済み patch を順番に適用してビルドする |
 | `lib/antigravity.sh` | Brewfile から Antigravity CLI だけを導入し、管理する設定項目を利用者の設定へ反映する |
 | `lib/herdr.sh` | Herdr 本体の存在確認、Herdrfile の plugin 同期、Herdr 専用 mode の設定コピーを行う。版不一致は非破壊の警告として扱い、`all` では後続の dotfiles 同期を継続する |
@@ -137,8 +138,8 @@ macOS では標準の `/bin/bash` が古い Bash 3.2 のため、`#!/usr/bin/env
 Bash 4 以降の構文に依存していると失敗する。dotfiles では `brew 'bash'` を管理対象にし、
 Fish は `.config/fish/config.fish`、zsh は `.config/zsh/zshenv` と `.config/zsh/zprofile`、bash login shell は
 `.config/bash/bash_profile` で `/opt/homebrew/bin` と `/opt/homebrew/sbin` を PATH の先頭へ寄せる。
-同じ箇所で `~/.nodenv/shims` をさらに前へ置き、`.node-version` による Node.js の版切り替え
-(「補助モジュールと MODE 引数」の `Nodefile`) を全 shell で有効にする。
+同じ箇所で `~/.local/share/mise/shims` をさらに前へ置き、`.node-version` / `.nvmrc` による
+Node.js の版切り替え (「補助モジュールと MODE 引数」の `Nodefile`) を全 shell で有効にする。
 
 `.zshenv` は非対話 zsh でも読まれるため、出力や重い処理は置かず PATH 整備だけに限定する。
 login zsh では macOS の `/etc/zprofile` が `.zshenv` の後に PATH を組み直すため、`.zprofile` でも
@@ -161,7 +162,7 @@ MODE を追加・変更する場合、認証情報や手動ログインなど re
 | `herdr` | Herdr 本体確認、Herdr 設定ファイルコピー、`Herdrfile` の plugin 同期。同期失敗は専用 mode の終了codeへ反映 |
 | `gws` | `update_gws` (未導入なら install、導入済みなら brew outdated 判定) |
 | `python` | `ensure_python_tools` (`Pythonfile` を `~/.local/share/dotfiles/python-site/<X.Y>` へ `uv pip install --target` し、user site の `.pth` で素の python3 に載せる。python の minor 更新は state 比較で検出して入れ直す) |
-| `node` | `ensure_node_versions` (`Nodefile` の各版を `nodenv install --skip-existing` で導入。`nodenv global` は変えず、`.node-version` を置くプロジェクトでだけ切り替わる) |
+| `node` | `ensure_node_versions` (`Nodefile` の各版を `mise install node@<版>` で導入。mise の global tool には登録せず、`.node-version` / `.nvmrc` を置くプロジェクトでだけ切り替わる) |
 | `npm` | `update_npm_globals` (Npmfile) |
 | `orca` | Brewfile の `font-moralerspace-hw` だけを導入し、`.config/orca/settings.json` を終了中のローカル Orca に適用 |
 | `backlog` | `ensure_backlog_head` (Backlog.md の main HEAD を Bun でビルドし、`~/.local/bin/backlog` へ配置) |
@@ -193,13 +194,19 @@ managed patch を使用している間は manifest の `base_commit` に対応�
 (`command -v`) を先頭で確認する。`Brewfile` には依存ツール (uv / googleworkspace-cli /
 ffmpeg / bun) を明示し、`Nodefile` / `Npmfile` / `Pythonfile` は各 lib/ が読む形式で行単位に列挙する。
 
-`Nodefile` は `nodenv` (Brewfile で管理) に導入する Node.js の版を 1 行 1 版で列挙する。
-プロジェクトの `.node-version` が要求する版を揃えるためのもので、`nodenv global` は設定しない。
-`nodenv` の shims を PATH の先頭に置くことで、`.node-version` のあるディレクトリではその版、
-ない場所では `system` (PATH 上の次の `node`、つまり Homebrew の `node`) に解決される。
-`.node-version` に書かれた版が `Nodefile` にない (= 未導入) と、そのディレクトリでは
-`node` が "version is not installed" で失敗するので、必要な版を `Nodefile` へ足して
-`./install.sh node` を実行する。
+`Nodefile` は `mise` (Brewfile で管理) に導入する Node.js の版を 1 行 1 版で列挙する。
+`22` のような系列指定も書け、その系列の最新版が入る。プロジェクトの `.node-version` /
+`.nvmrc` が要求する版を揃えるためのもので、mise の global tool (`[tools]`) には登録しない。
+`mise` の shims を PATH の先頭に置くことで、版ファイルのあるディレクトリではその版
+(`22` は導入済みの 22.x) に解決され、版ファイルのない場所では shims が PATH 上の次の
+`node` (Homebrew の `node`) へ fallback する。
+
+mise の設定は `.config/mise/config.toml` (コピー先 `~/.config/mise/config.toml`) に置く。
+mise は `.node-version` 等の言語固有の版ファイルを既定では読まないため
+`idiomatic_version_file_enable_tools = ["node"]` で node だけ有効にし、
+`not_found_auto_install = false` で未導入の版の自動ダウンロードを止める。
+版ファイルの版が `Nodefile` にない (= 未導入) 場合も shims は Homebrew の `node` へ fallback
+するので、要求どおりの版を使うには `Nodefile` へ足して `./install.sh node` を実行する。
 
 `Pythonfile` の導入先は専用 venv ではなく、`~/.local/share/dotfiles/python-site/<X.Y>`
 (dotfiles 専用 dir) で、これを `command -v python3` が指す python の user site へ置く
