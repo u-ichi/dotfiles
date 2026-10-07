@@ -474,10 +474,7 @@ ensure_docker_autostart
 install_docker_disk_maintenance
 echo ""
 
-# === 日次メンテナンス ===
-echo "--- 日次メンテナンス ---"
-install_dotfiles_daily_maintenance
-echo ""
+# 日次メンテナンス LaunchAgent は停止中のため自動登録しない (登録は ./install.sh maintenance で明示的に行う)
 
 echo "完了しました"
 echo "以降も ./install.sh で設定ファイルコピーとパッケージを同期してください"

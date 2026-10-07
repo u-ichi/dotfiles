@@ -89,7 +89,7 @@ dotfiles 側では扱わない。詳細は claude.codex の `install.sh` と `do
 
 | スクリプト | 役割 |
 |-----------|------|
-| `install.sh` | 初回セットアップと日常更新の単一エントリポイント。Brewfile 適用 / 更新、設定ファイルコピー、Git ローカル設定の対話的入力、AWS 設定の再展開、Claude Code / Herdr / Herdr plugin / mkcert / Fisher / Terraform / Node.js 版 (mise) / npm / Backlog.md / Playwright browser binary / Python tools の同期、macOS defaults と Spotlight 除外の適用、日次メンテナンス LaunchAgent 登録を行う。第 1 引数で MODE (`brew` / `antigravity` / `orca` / `herdr` / `gws` / `python` / `node` / `npm` / `backlog` / `playwright` / `vscode` / `fish` / `docker` / `maintenance` / `spotlight`) を指定するとそのモジュールだけ再実行する |
+| `install.sh` | 初回セットアップと日常更新の単一エントリポイント。Brewfile 適用 / 更新、設定ファイルコピー、Git ローカル設定の対話的入力、AWS 設定の再展開、Claude Code / Herdr / Herdr plugin / mkcert / Fisher / Terraform / Node.js 版 (mise) / npm / Backlog.md / Playwright browser binary / Python tools の同期、macOS defaults と Spotlight 除外の適用を行う。日次メンテナンス LaunchAgent は停止中のため、引数なしでは登録せず `maintenance` MODE でだけ登録する。第 1 引数で MODE (`brew` / `antigravity` / `orca` / `herdr` / `gws` / `python` / `node` / `npm` / `backlog` / `playwright` / `vscode` / `fish` / `docker` / `maintenance` / `spotlight`) を指定するとそのモジュールだけ再実行する |
 | `lib/backlog.sh` | Backlog.md の公式 `origin` を確認し、通常は `origin/main` を取得してビルドする。managed manifest がある場合は指定した base commit を一時展開し、管理済み patch を順番に適用してビルドする |
 | `lib/antigravity.sh` | Brewfile から Antigravity CLI だけを導入し、管理する設定項目を利用者の設定へ反映する |
 | `lib/herdr.sh` | Herdr 本体の存在確認、Herdrfile の plugin 同期、Herdr 専用 mode の設定コピーを行う。版不一致は非破壊の警告として扱い、`all` では後続の dotfiles 同期を継続する |

@@ -34,7 +34,8 @@ Brewfile に登録した CLI や GUI アプリだけを導入する場合:
 ./install.sh brew deskpad
 ```
 
-日次メンテナンスだけを同期し直す場合:
+日次メンテナンスは停止中で、引数なしの `./install.sh` では登録しない。
+有効にする場合、または同期し直す場合:
 
 ```bash
 ./install.sh maintenance
