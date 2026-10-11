@@ -136,9 +136,16 @@
                         ]
                     },
                     {
-                        "description": "コマンドキーを単体で押したときに、英数・かなキーを送信する。（左コマンドキーは英数、右コマンドキーはかな） (rev 3, no-lazy for Cmd+Tab)",
+                        "description": "コマンドキーを単体で押したときに、英数・かなキーを送信する。（左コマンドキーは英数、右コマンドキーはかな） (rev 4: すでにそのモードなら送らず、ATOKの英数・かなキー2度押し再変換を防ぐ)",
                         "manipulators": [
                             {
+                                "conditions": [
+                                    {
+                                        "description": "ATOKの英字モード中は英数キーを送らない（2度押しで直前の確定文字が英字に再変換されるため）",
+                                        "input_sources": [{ "input_mode_id": "^com\\.apple\\.inputmethod\\.Roman$" }],
+                                        "type": "input_source_unless"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "left_command",
                                     "modifiers": { "optional": ["any"] }
@@ -149,6 +156,13 @@
                                 "type": "basic"
                             },
                             {
+                                "conditions": [
+                                    {
+                                        "description": "ATOKのひらがなモード中はかなキーを送らない（2度押しで直前の確定文字がかなに再変換されるため）",
+                                        "input_sources": [{ "input_mode_id": "^com\\.apple\\.inputmethod\\.Japanese$" }],
+                                        "type": "input_source_unless"
+                                    }
+                                ],
                                 "from": {
                                     "key_code": "right_command",
                                     "modifiers": { "optional": ["any"] }
