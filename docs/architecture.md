@@ -41,7 +41,7 @@
 │   │   ├── fish_plugins        #   Fisher プラグイン一覧
 │   │   ├── completions/        #   補完定義 (gcloud, gsutil)
 │   │   └── functions/          #   カスタム関数 (claude/codex/ai-panes/sidebar 等、テーマ系は .gitignore)
-│   ├── mise/config.toml        # mise のグローバル設定 (.node-version / .nvmrc の読み取り、自動導入の無効化)
+│   ├── mise/global.toml        # mise のグローバル設定 (.node-version / .nvmrc の読み取り、自動導入の無効化)
 │   ├── zsh/{zshenv,zprofile}   # zsh 起動時の Homebrew PATH 優先設定
 │   ├── bash/bash_profile       # bash login shell の Homebrew PATH 優先設定
 │   ├── git/config              # Git 設定 (共通、個人情報は config.local に分離)
@@ -201,7 +201,9 @@ ffmpeg / bun) を明示し、`Nodefile`、`Npmfile`、`Pythonfile` は各 lib/ �
 (`22` は導入済みの 22.x) に解決され、版ファイルのない場所では shims が PATH 上の次の
 `node` (Homebrew の `node`) へ fallback する。
 
-mise の設定は `.config/mise/config.toml` (コピー先 `~/.config/mise/config.toml`) に置く。
+mise の設定は `.config/mise/global.toml` (コピー先 `~/.config/mise/config.toml`) に置く。
+repo 側を `config.toml` の名前にすると、checkout や worktree の中で開いた shell で mise が
+それを project 設定として検出し「is not trusted」警告を出すため、repo 側だけ名前を変えている。
 mise は `.node-version` などの言語固有の版ファイルを既定では読み込まないため、
 `idiomatic_version_file_enable_tools = ["node"]` で node だけ有効にし、
 `not_found_auto_install = false` で未導入の版の自動ダウンロードを止める。

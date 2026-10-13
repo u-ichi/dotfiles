@@ -1,4 +1,6 @@
 # mise のグローバル設定 (コピー先: ~/.config/mise/config.toml)
+# repo 側のファイル名を config.toml にすると、この repo の checkout 内で mise が project 設定として拾い
+# 「is not trusted」警告を出すため、global.toml の名前で置く。
 # Node.js の版は Nodefile で導入し、プロジェクトの .node-version / .nvmrc で切り替える。
 # [tools] は置かない。版指定の無い場所では shims が PATH 上の次の node (Homebrew) へ fallback する。
 
