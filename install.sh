@@ -19,6 +19,7 @@ source "$SCRIPT_DIR/lib/maintenance.sh"
 source "$SCRIPT_DIR/lib/backlog.sh"
 source "$SCRIPT_DIR/lib/orca.sh"
 source "$SCRIPT_DIR/lib/antigravity.sh"
+source "$SCRIPT_DIR/lib/admin.sh"
 
 MODE="${1:-all}"
 
@@ -62,7 +63,22 @@ sync_homebrew() {
   brew trust --tap u-ichi/tap 2>/dev/null || true
 
   trust_brewfile_formulas "$SCRIPT_DIR/Brewfile"
-  brew bundle --file="$SCRIPT_DIR/Brewfile"
+
+  # インストーラ形式の cask は導入・更新で sudo を求めるため外し、./install.sh sudo に任せる
+  tap_brewfile_taps "$SCRIPT_DIR/Brewfile"
+  local admin_casks=()
+  local cask
+  while IFS= read -r cask; do
+    admin_casks+=("$cask")
+  done < <(list_admin_casks "$SCRIPT_DIR/Brewfile")
+  mkdir -p "$SCRIPT_DIR/tmp"
+  local brewfile
+  brewfile="$(mktemp "$SCRIPT_DIR/tmp/brew-all.XXXXXX")"
+  # 初回は macOS 標準の Bash 3.2 で動くため、空配列でも unbound にならない形で展開する
+  write_brewfile_without_casks "$SCRIPT_DIR/Brewfile" "$brewfile" ${admin_casks[@]+"${admin_casks[@]}"}
+  brew bundle --file="$brewfile"
+  rm -f "$brewfile"
+  report_missing_admin_casks ${admin_casks[@]+"${admin_casks[@]}"}
   brew cleanup
   echo ""
 }
@@ -205,6 +221,13 @@ if [ "$MODE" = "brew" ]; then
   exit 0
 fi
 
+# 管理者権限が要る導入だけを実行する（パスワードは最初の 1 回だけ求める）
+if [ "$MODE" = "sudo" ]; then
+  run_admin_tasks "$SCRIPT_DIR/Brewfile"
+  echo "完了しました"
+  exit 0
+fi
+
 if [ "$MODE" = "antigravity" ]; then
   ensure_antigravity
   sync_antigravity_settings
@@ -317,7 +340,7 @@ fi
 
 if [ "$MODE" != "all" ]; then
   echo "エラー: 未知の MODE です: $MODE"
-  echo "利用可能: all, brew, antigravity, orca, herdr, gws, python, node, npm, backlog, playwright, vscode, fish, karabiner, docker, maintenance, spotlight"
+  echo "利用可能: all, sudo, brew, antigravity, orca, herdr, gws, python, node, npm, backlog, playwright, vscode, fish, karabiner, docker, maintenance, spotlight"
   exit 1
 fi
 
@@ -434,8 +457,12 @@ else
   echo "インストール: mkcert"
   brew install mkcert
 fi
-# ローカル CA をシステムに登録（未登録なら）
-mkcert -install 2>/dev/null || true
+# ローカル CA のシステム登録は sudo が要るため ./install.sh sudo で行う
+if mkcert_ca_installed; then
+  echo "済み:     mkcert ローカル CA"
+else
+  echo "スキップ: mkcert ローカル CA は未登録。./install.sh sudo で登録する"
+fi
 
 # === Terraform (tfenv) ===
 echo "--- Terraform ---"
