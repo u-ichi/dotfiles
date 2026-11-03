@@ -93,7 +93,7 @@ dotfiles 側では扱わない。詳細は claude.codex の `install.sh` と `do
 | `lib/backlog.sh` | Backlog.md の公式 `origin` を確認し、通常は `origin/main` を取得してビルドする。managed manifest がある場合は指定した base commit を一時展開し、管理済み patch を順番に適用してビルドする |
 | `lib/antigravity.sh` | Brewfile から Antigravity CLI だけを導入し、管理する設定項目を利用者の設定へ反映する |
 | `lib/herdr.sh` | Herdr 本体の存在確認、Herdrfile の plugin 同期、Herdr 専用 mode の設定コピーを行う。版不一致は非破壊の警告として扱い、`all` では後続の dotfiles 同期を継続する |
-| `scripts/docker-disk-maintenance.sh` | Docker Desktop の `Docker.raw` とホスト空き容量を確認し、古い build cache と未使用 image / stopped container / unused network を削除する。volume は削除しない |
+| `scripts/docker-disk-maintenance.sh` | Docker Desktop の `Docker.raw` とホスト空き容量を確認し、古い build cache と未使用 image / stopped container / unused network と、どのコンテナにも付いていない無名の volume を削除し、空いた分を `fstrim` で macOS に返す。名前付きの volume は削除しない |
 | `scripts/cleanup-local-disk.sh` | Codex Crashpad dump、crude-morning-report の SQLite backup、aws-cliniconnect-terraform の `.terraform` cache、Homebrew cache を整理する。既定は dry-run、日次メンテナンスでは `--apply` で実行する |
 | `scripts/daily-maintenance.sh` | dotfiles worktree が clean の場合に `git pull --ff-only` と `./install.sh` を実行し、その後 `cleanup-local-disk.sh --apply`、Codex 要約、Slack 投稿を行う |
 | `lint.sh` | ShellCheck (Bash) / `fish --no-execute` / tmux isolated smoke test / `scripts/test-spotlight.sh`（配布 call site 故障注入）/ `scripts/test-disable-spotlight-indexing.sh`（停止判定 21 件）/ taplo (TOML) / `python3 -m json.tool` (JSON) を実行。GitHub Actions は静的チェックに加え Spotlight 2 テストを最小配線で実行する |

@@ -13,19 +13,27 @@ PRUNE_UNTIL="${DOTFILES_DOCKER_PRUNE_UNTIL:-168h}"
 CACHE_UNTIL="${DOTFILES_DOCKER_CACHE_UNTIL:-168h}"
 LOG_DIR="${DOTFILES_DOCKER_LOG_DIR:-$HOME/Library/Logs/dotfiles}"
 LOG_FILE="$LOG_DIR/docker-disk-maintenance.log"
+PRUNE_VOLUMES="${DOTFILES_DOCKER_PRUNE_VOLUMES:-1}"
+
+# launchd の PATH に Docker Desktop の CLI が無い Mac がある（/usr/local/bin/docker のリンクが無いと command not found で何も消えない）
+DOCKER_APP_BIN="/Applications/Docker.app/Contents/Resources/bin"
+if ! command -v docker >/dev/null 2>&1 && [ -x "$DOCKER_APP_BIN/docker" ]; then
+  PATH="$PATH:$DOCKER_APP_BIN"
+fi
 
 usage() {
   cat <<'USAGE'
 Usage: docker-disk-maintenance.sh [--status|--dry-run|--force]
 
 Docker Desktop の Docker.raw とホスト空き容量を確認し、--force 指定時だけ
-volume を除外した安全側の prune を実行する。
+安全側の prune を実行する。volume は、どのコンテナにも付いていない無名の volume だけを消す（名前付きの volume は消さない）。
 
 環境変数:
   DOTFILES_DOCKER_PRUNE_THRESHOLD_GIB  Docker.raw がこの GiB 以上なら image/container/network も prune (既定: 60)
   DOTFILES_DOCKER_MIN_FREE_GIB         ホスト空き容量がこの GiB 以下なら image/container/network も prune (既定: 30)
   DOTFILES_DOCKER_PRUNE_UNTIL          image/container/network の prune 対象期間 (既定: 168h)
   DOTFILES_DOCKER_CACHE_UNTIL          build cache の prune 対象期間 (既定: 168h)
+  DOTFILES_DOCKER_PRUNE_VOLUMES        1 なら、どのコンテナにも付いていない無名の volume を毎回消す (既定: 1)
 USAGE
 }
 
@@ -122,6 +130,11 @@ if [ "$MODE" = "status" ]; then
   exit 0
 fi
 
+if ! command -v docker >/dev/null 2>&1; then
+  log "docker コマンドが見つからないため prune をスキップ"
+  exit 1
+fi
+
 if ! docker_ready; then
   log "Docker daemon が応答しないため prune をスキップ"
   exit 0
@@ -135,6 +148,16 @@ if should_deep_prune "$raw_gib" "$free_gib"; then
   run_or_report docker image prune -af --filter "until=$PRUNE_UNTIL"
 else
   log "深い prune は不要: Docker.raw とホスト空き容量が閾値内"
+fi
+
+# 作り直しを繰り返す compose の環境は、前のコンテナの無名 volume（DB、node_modules）を残し続ける
+if [ "$PRUNE_VOLUMES" = "1" ]; then
+  run_or_report docker volume prune -f
+fi
+
+# 消した分を Docker.raw から macOS に返す（返さないと Docker.raw は縮まない）
+if [ "$FORCE" -eq 1 ] && docker image inspect alpine:latest >/dev/null 2>&1; then
+  run_or_report docker run --rm --privileged --pid=host alpine:latest nsenter -t 1 -m -- fstrim /var/lib
 fi
 
 if [ "$FORCE" -eq 1 ]; then
