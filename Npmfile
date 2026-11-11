@@ -2,6 +2,8 @@
 @colbymchenry/codegraph
 # CodeGraph の npm shim が参照する macOS arm64 用 bundle
 @colbymchenry/codegraph-darwin-arm64
+# Cursor の Bot Development Kit。agent repo の grokbot-agents skill が Grok Bot との送受信に使う
+@cursor/bdk
 # Codex の headless browser 検証で使う Playwright CLI
 playwright
 # Excel ファイルの作成・編集
