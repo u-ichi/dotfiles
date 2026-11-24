@@ -29,6 +29,8 @@ brew 'docker-compose'
 brew 'fish'
 brew 'fzf'
 brew 'ffmpeg'
+# u1macmini の GitHub Actions runner で、Linux 向けのスクリプトのテストが使う
+brew 'flock'
 brew 'gh'
 brew 'git'
 brew 'git-lfs'
